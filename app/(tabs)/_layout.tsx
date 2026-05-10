@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router';
+import { Text } from 'react-native';
 import { colors } from '@/lib/theme';
 
 export default function TabLayout() {
@@ -19,31 +20,15 @@ export default function TabLayout() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{ title: 'Anasayfa', tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} /> }}
-      />
-      <Tabs.Screen
-        name="patients"
-        options={{ title: 'Hastalar', tabBarIcon: ({ color }) => <TabIcon emoji="👥" color={color} /> }}
-      />
-      <Tabs.Screen
-        name="diagnose"
-        options={{ title: 'Tanı', tabBarIcon: ({ color }) => <TabIcon emoji="📋" color={color} /> }}
-      />
-      <Tabs.Screen
-        name="library"
-        options={{ title: 'Kütüphane', tabBarIcon: ({ color }) => <TabIcon emoji="📚" color={color} /> }}
-      />
-      <Tabs.Screen
-        name="ai-chat"
-        options={{ title: 'AI Asistan', tabBarIcon: ({ color }) => <TabIcon emoji="🤖" color={color} /> }}
-      />
+      <Tabs.Screen name="index" options={{ title: 'Anasayfa', tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} /> }} />
+      <Tabs.Screen name="patients" options={{ title: 'Hastalar', tabBarIcon: ({ color }) => <TabIcon emoji="👥" color={color} /> }} />
+      <Tabs.Screen name="schedule" options={{ title: 'Takvim', tabBarIcon: ({ color }) => <TabIcon emoji="📅" color={color} /> }} />
+      <Tabs.Screen name="library" options={{ title: 'Kütüphane', tabBarIcon: ({ color }) => <TabIcon emoji="📚" color={color} /> }} />
+      <Tabs.Screen name="ai-chat" options={{ title: 'AI Asistan', tabBarIcon: ({ color }) => <TabIcon emoji="🤖" color={color} /> }} />
     </Tabs>
   );
 }
 
 function TabIcon({ emoji, color }: { emoji: string; color: string }) {
-  const { Text } = require('react-native');
-  return <Text style={{ fontSize: 20, opacity: color === '#94a3b8' ? 0.5 : 1 }}>{emoji}</Text>;
+  return <Text style={{ fontSize: 20, opacity: color === colors.textMuted ? 0.5 : 1 }}>{emoji}</Text>;
 }

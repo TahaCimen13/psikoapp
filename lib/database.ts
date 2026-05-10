@@ -25,12 +25,26 @@ export async function initDatabase(): Promise<void> {
       updated_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS sessions (
+    CREATE TABLE IF NOT EXISTS appointments (
       id TEXT PRIMARY KEY,
       patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
       date TEXT NOT NULL,
+      duration INTEGER NOT NULL DEFAULT 50,
+      notes TEXT,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+      appointment_id TEXT REFERENCES appointments(id) ON DELETE SET NULL,
+      date TEXT NOT NULL,
       duration INTEGER,
       session_number INTEGER,
+      approach TEXT,
+      mood_rating INTEGER,
       status TEXT NOT NULL DEFAULT 'completed',
       summary TEXT,
       created_at TEXT NOT NULL,
@@ -65,6 +79,40 @@ export async function initDatabase(): Promise<void> {
       interpretation TEXT,
       date TEXT,
       notes TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS homework (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      due_date TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      completed_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS treatment_plans (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+      approach TEXT,
+      goals TEXT,
+      interventions TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS risk_flags (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      level TEXT NOT NULL DEFAULT 'dusuk',
+      category TEXT NOT NULL DEFAULT 'diger',
+      notes TEXT,
+      resolved INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS books (
@@ -102,4 +150,21 @@ export async function initDatabase(): Promise<void> {
       value TEXT
     );
   `);
+
+  await runMigrations();
+}
+
+async function runMigrations(): Promise<void> {
+  if (!db) return;
+
+  // Add new columns to sessions if they don't exist (migration for existing DBs)
+  try {
+    await db.execAsync('ALTER TABLE sessions ADD COLUMN approach TEXT');
+  } catch {}
+  try {
+    await db.execAsync('ALTER TABLE sessions ADD COLUMN mood_rating INTEGER');
+  } catch {}
+  try {
+    await db.execAsync('ALTER TABLE sessions ADD COLUMN appointment_id TEXT');
+  } catch {}
 }

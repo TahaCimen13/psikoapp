@@ -13,7 +13,7 @@ export default function Dashboard() {
   const { getTodaySessions, patients, getStats, settings } = useDatabase();
   const router = useRouter();
   const [todaySessions, setTodaySessions] = useState<TodaySession[]>([]);
-  const [stats, setStats] = useState({ totalPatients: 0, monthSessions: 0, activeDiagnoses: 0 });
+  const [stats, setStats] = useState({ totalPatients: 0, monthSessions: 0, activeDiagnoses: 0, activeRisks: 0 });
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -61,6 +61,7 @@ export default function Dashboard() {
         <StatCard label="Toplam Hasta" value={stats.totalPatients} emoji="👥" />
         <StatCard label="Bu Ay Seans" value={stats.monthSessions} emoji="📅" />
         <StatCard label="Aktif Tanı" value={stats.activeDiagnoses} emoji="📋" />
+        {stats.activeRisks > 0 && <StatCard label="Risk" value={stats.activeRisks} emoji="⚠️" alert />}
       </View>
 
       <SectionHeader title="Bugünün Seansları" />
@@ -116,11 +117,11 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value, emoji }: { label: string; value: number; emoji: string }) {
+function StatCard({ label, value, emoji, alert }: { label: string; value: number; emoji: string; alert?: boolean }) {
   return (
-    <View style={styles.statCard}>
+    <View style={[styles.statCard, alert && { borderColor: colors.error + '60' }]}>
       <Text style={{ fontSize: 24 }}>{emoji}</Text>
-      <Text style={styles.statValue}>{value}</Text>
+      <Text style={[styles.statValue, alert && { color: colors.error }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );

@@ -9,12 +9,26 @@ export interface Patient {
   updated_at: string;
 }
 
-export interface Session {
+export interface Appointment {
   id: string;
   patient_id: string;
   date: string;
+  duration: number;
+  notes?: string;
+  status: 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Session {
+  id: string;
+  patient_id: string;
+  appointment_id?: string;
+  date: string;
   duration?: number;
   session_number?: number;
+  approach?: 'BDT' | 'DBT' | 'ACT' | 'Psikodinamik' | 'EMDR' | 'Diger';
+  mood_rating?: number;
   status: 'planned' | 'completed' | 'cancelled';
   summary?: string;
   created_at: string;
@@ -24,7 +38,7 @@ export interface Session {
 export interface SessionNote {
   id: string;
   session_id: string;
-  category: 'genel' | 'davranis' | 'duygu' | 'bilis' | 'hedef' | 'mudahale';
+  category: 'genel' | 'davranis' | 'duygu' | 'bilis' | 'hedef' | 'mudahale' | 'risk';
   content: string;
   created_at: string;
 }
@@ -49,6 +63,40 @@ export interface Assessment {
   interpretation?: string;
   date?: string;
   notes?: string;
+}
+
+export interface Homework {
+  id: string;
+  patient_id: string;
+  session_id?: string;
+  title: string;
+  description?: string;
+  due_date?: string;
+  status: 'pending' | 'completed' | 'skipped';
+  completed_at?: string;
+  created_at: string;
+}
+
+export interface TreatmentPlan {
+  id: string;
+  patient_id: string;
+  approach?: string;
+  goals?: string;
+  interventions?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RiskFlag {
+  id: string;
+  patient_id: string;
+  session_id?: string;
+  level: 'dusuk' | 'orta' | 'yuksek' | 'kritik';
+  category: 'intihar' | 'siddet' | 'ihmal' | 'madde' | 'diger';
+  notes?: string;
+  resolved: boolean;
+  created_at: string;
 }
 
 export interface Book {
@@ -85,27 +133,34 @@ export interface AppSettings {
   claude_api_key?: string;
   psychologist_name?: string;
   psychologist_title?: string;
+  pin_enabled?: string;
+  auto_lock_minutes?: string;
 }
 
 export const NOTE_CATEGORIES: { value: SessionNote['category']; label: string }[] = [
-  { value: 'genel', label: 'Genel Gozlem' },
-  { value: 'davranis', label: 'Davranis' },
+  { value: 'genel', label: 'Genel Gözlem' },
+  { value: 'davranis', label: 'Davranış' },
   { value: 'duygu', label: 'Duygu Durum' },
-  { value: 'bilis', label: 'Bilissel Icerik' },
-  { value: 'mudahale', label: 'Mudahale' },
-  { value: 'hedef', label: 'Hedefler / Odevler' },
+  { value: 'bilis', label: 'Bilişsel İçerik' },
+  { value: 'mudahale', label: 'Müdahale' },
+  { value: 'hedef', label: 'Hedefler / Ödevler' },
+  { value: 'risk', label: 'Risk Değerlendirmesi' },
 ];
+
+export const SESSION_APPROACHES = [
+  'BDT', 'DBT', 'ACT', 'Psikodinamik', 'EMDR', 'Diger',
+] as const;
 
 export const ASSESSMENT_TESTS = [
   'BDI-II (Beck Depresyon Envanteri)',
   'BAI (Beck Anksiyete Envanteri)',
   'SCL-90-R',
   'MMPI-2',
-  'Hamilton Depresyon Olcegi',
-  'Hamilton Anksiyete Olcegi',
+  'Hamilton Depresyon Ölçeği',
+  'Hamilton Anksiyete Ölçeği',
   'PHQ-9',
   'GAD-7',
   'PCL-5 (PTSD)',
-  'YSQ (Young Sema Olcegi)',
+  'YSQ (Young Şema Ölçeği)',
   'Diger',
 ];
