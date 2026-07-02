@@ -10,7 +10,7 @@ const APPROACHES = ['BDT', 'DBT', 'ACT', 'Psikodinamik', 'EMDR', 'Diger'];
 export default function TreatmentScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getTreatmentPlan, saveTreatmentPlan, getPatient, getDiagnosesByPatient, getSessionsByPatient, getAssessmentsByPatient, settings } = useDatabase();
+  const { getTreatmentPlan, saveTreatmentPlan, getPatient, getDiagnosesByPatient, getSessionsByPatient, getAssessmentsByPatient, settings, getActiveConsent } = useDatabase();
   const [approach, setApproach] = useState('');
   const [goals, setGoals] = useState('');
   const [interventions, setInterventions] = useState('');
@@ -39,19 +39,33 @@ export default function TreatmentScreen() {
     Alert.alert('Kaydedildi', 'Tedavi planı güncellendi.');
   };
 
-  const generateFormulation = async () => {
+  // KVKK: rıza yoksa danışan verisi AI'ya gönderilmez
+  const checkAIAllowed = async (): Promise<boolean> => {
     if (!settings.claude_api_key) {
       Alert.alert('API Anahtarı Eksik', 'Ayarlardan Claude API anahtarı ekleyin.');
-      return;
+      return false;
     }
+    const consent = await getActiveConsent(id);
+    if (!consent) {
+      Alert.alert('KVKK Rızası Gerekli', 'Bu danışan için aktif KVKK rızası yok. Hasta profilinden rıza kaydı alın.');
+      return false;
+    }
+    return true;
+  };
+
+  const generateFormulation = async () => {
+    if (!(await checkAIAllowed())) return;
     setGenerating(true);
     try {
       const [patient, diagnoses, sessions, assessments] = await Promise.all([
         getPatient(id), getDiagnosesByPatient(id), getSessionsByPatient(id), getAssessmentsByPatient(id),
       ]);
       if (!patient) return;
-      const result = await generateCaseFormulation(settings.claude_api_key, patient, diagnoses, sessions, assessments);
-      setGoals(prev => prev ? prev + '\n\n--- AI Formülasyonu ---\n' + result : result);
+      const result = await generateCaseFormulation(settings.claude_api_key!, patient, diagnoses, sessions, assessments);
+      setGoals(prev => {
+        const labeled = '--- 🤖 AI oluşturdu, gözden geçirin ---\n' + result;
+        return prev ? prev + '\n\n' + labeled : labeled;
+      });
     } catch (e: any) {
       Alert.alert('Hata', e.message);
     } finally {
@@ -60,16 +74,16 @@ export default function TreatmentScreen() {
   };
 
   const generateSuggestions = async () => {
-    if (!settings.claude_api_key) {
-      Alert.alert('API Anahtarı Eksik', 'Ayarlardan Claude API anahtarı ekleyin.');
-      return;
-    }
+    if (!(await checkAIAllowed())) return;
     setGenerating(true);
     try {
       const [patient, diagnoses] = await Promise.all([getPatient(id), getDiagnosesByPatient(id)]);
       if (!patient) return;
-      const result = await suggestInterventions(settings.claude_api_key, patient, diagnoses, approach);
-      setInterventions(prev => prev ? prev + '\n\n--- AI Önerileri ---\n' + result : result);
+      const result = await suggestInterventions(settings.claude_api_key!, patient, diagnoses, approach);
+      setInterventions(prev => {
+        const labeled = '--- 🤖 AI oluşturdu, gözden geçirin ---\n' + result;
+        return prev ? prev + '\n\n' + labeled : labeled;
+      });
     } catch (e: any) {
       Alert.alert('Hata', e.message);
     } finally {

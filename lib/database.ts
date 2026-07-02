@@ -145,6 +145,14 @@ export async function initDatabase(): Promise<void> {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS kvkk_consents (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+      version TEXT NOT NULL,
+      consented_at TEXT NOT NULL,
+      revoked_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
       value TEXT

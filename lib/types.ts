@@ -129,6 +129,14 @@ export interface ChatMessage {
   created_at: string;
 }
 
+export interface KvkkConsent {
+  id: string;
+  patient_id: string;
+  version: string;       // onaylanan rıza metninin versiyonu (örn. "1.0")
+  consented_at: string;
+  revoked_at?: string;   // geri çekildiyse; kayıt silinmez (denetim izi)
+}
+
 export interface AppSettings {
   claude_api_key?: string;
   psychologist_name?: string;

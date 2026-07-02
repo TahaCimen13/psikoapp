@@ -10,7 +10,7 @@ import { NOTE_CATEGORIES } from '@/lib/types';
 export default function SessionDetail() {
   const { id, sessionId } = useLocalSearchParams<{ id: string; sessionId: string }>();
   const router = useRouter();
-  const { getSession, getNotesBySession, addNote, updateNote, deleteNote, updateSession, deleteSession, getPatient, settings } = useDatabase();
+  const { getSession, getNotesBySession, addNote, updateNote, deleteNote, updateSession, deleteSession, getPatient, settings, getActiveConsent } = useDatabase();
 
   const [session, setSession] = useState<Session | null>(null);
   const [notes, setNotes] = useState<SessionNote[]>([]);
@@ -70,6 +70,12 @@ export default function SessionDetail() {
     if (!session || aiLoading) return;
     if (!settings.claude_api_key) {
       Alert.alert('API Anahtarı Gerekli', 'AI özet için Ayarlar ekranından Claude API anahtarınızı girin.');
+      return;
+    }
+    // KVKK: rıza yoksa seans notları AI'ya gönderilmez
+    const consent = await getActiveConsent(id);
+    if (!consent) {
+      Alert.alert('KVKK Rızası Gerekli', 'Bu danışan için aktif KVKK rızası yok. Hasta profilinden rıza kaydı alın.');
       return;
     }
     if (notes.length === 0) {

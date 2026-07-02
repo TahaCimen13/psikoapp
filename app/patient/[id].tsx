@@ -4,34 +4,40 @@ import { useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 import { RISK_LEVELS, RISK_CATEGORIES, highestRiskFlag } from '@/components/RiskBadge';
-import type { Patient, Session, Diagnosis, Homework, RiskFlag } from '@/lib/types';
+import ConsentModal from '@/components/ConsentModal';
+import { KVKK_CONSENT_VERSION } from '@/lib/consent';
+import type { Patient, Session, Diagnosis, Homework, RiskFlag, KvkkConsent } from '@/lib/types';
 
 export default function PatientProfile() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getPatient, getSessionsByPatient, getDiagnosesByPatient, getHomeworkByPatient, getRiskFlagsByPatient, deletePatient } = useDatabase();
+  const { getPatient, getSessionsByPatient, getDiagnosesByPatient, getHomeworkByPatient, getRiskFlagsByPatient, deletePatient, getActiveConsent, recordConsent, revokeConsent } = useDatabase();
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
   const [riskFlags, setRiskFlags] = useState<RiskFlag[]>([]);
+  const [consent, setConsent] = useState<KvkkConsent | null>(null);
+  const [showConsent, setShowConsent] = useState(false);
   const [pendingHw, setPendingHw] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [p, s, d, hw, rf] = await Promise.all([
+    const [p, s, d, hw, rf, c] = await Promise.all([
       getPatient(id),
       getSessionsByPatient(id),
       getDiagnosesByPatient(id),
       getHomeworkByPatient(id),
       getRiskFlagsByPatient(id),
+      getActiveConsent(id),
     ]);
     setPatient(p);
     setSessions(s);
     setDiagnoses(d);
     setRiskFlags(rf);
+    setConsent(c);
     setPendingHw(hw.filter((h: Homework) => h.status === 'pending').length);
-  }, [id, getPatient, getSessionsByPatient, getDiagnosesByPatient, getHomeworkByPatient, getRiskFlagsByPatient]);
+  }, [id, getPatient, getSessionsByPatient, getDiagnosesByPatient, getHomeworkByPatient, getRiskFlagsByPatient, getActiveConsent]);
 
   // Ekrana her dönüşte verileri yenile (alt ekranlardan dönüşler dahil)
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -108,6 +114,15 @@ export default function PatientProfile() {
             <Text style={styles.diagLabel}>{primaryDiag.dsm_name || primaryDiag.dsm_code}</Text>
           )}
           {patient.background ? <Text style={styles.background}>{patient.background}</Text> : null}
+
+          <TouchableOpacity
+            style={[styles.consentRow, consent ? styles.consentOk : styles.consentMissing]}
+            onPress={() => setShowConsent(true)}
+          >
+            <Text style={[styles.consentText, { color: consent ? colors.success : colors.warning }]}>
+              {consent ? `🛡 KVKK Rızası ✓ v${consent.version}` : '⚠️ KVKK rızası alınmamış'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Hızlı Aksiyonlar */}
@@ -155,6 +170,15 @@ export default function PatientProfile() {
           )}
         </View>
       </ScrollView>
+
+      <ConsentModal
+        visible={showConsent}
+        patientName={patient.name}
+        consent={consent}
+        onClose={() => setShowConsent(false)}
+        onConsent={async () => { await recordConsent(id, KVKK_CONSENT_VERSION); await load(); }}
+        onRevoke={async () => { await revokeConsent(id); await load(); }}
+      />
     </View>
   );
 }
@@ -220,6 +244,10 @@ const styles = StyleSheet.create({
   empty: { padding: spacing.lg, alignItems: 'center' },
   emptyText: { color: colors.textMuted, fontSize: 14 },
   moreText: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginTop: 4 },
+  consentRow: { marginTop: spacing.sm, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 5, borderWidth: 1 },
+  consentOk: { backgroundColor: colors.success + '15', borderColor: colors.success + '50' },
+  consentMissing: { backgroundColor: colors.warning + '15', borderColor: colors.warning + '50' },
+  consentText: { fontSize: 12, fontWeight: '600' },
   riskBand: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: spacing.md, marginBottom: spacing.md, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   riskBandText: { color: '#fff', fontWeight: '700', fontSize: 13, flex: 1 },
   riskBandArrow: { color: '#fff', fontSize: 18, fontWeight: '700', marginLeft: spacing.sm },

@@ -3,7 +3,7 @@ import { getDb } from '@/lib/database';
 import { generateId, now } from '@/lib/id';
 import type {
   Patient, Appointment, Session, SessionNote, Diagnosis, Assessment,
-  Homework, TreatmentPlan, RiskFlag, Book, BookAnnotation, ChatMessage, AppSettings,
+  Homework, TreatmentPlan, RiskFlag, Book, BookAnnotation, ChatMessage, AppSettings, KvkkConsent,
 } from '@/lib/types';
 
 interface DatabaseContextType {
@@ -56,6 +56,11 @@ interface DatabaseContextType {
   // Treatment Plans
   getTreatmentPlan: (patientId: string) => Promise<TreatmentPlan | null>;
   saveTreatmentPlan: (data: Omit<TreatmentPlan, 'id' | 'created_at' | 'updated_at'>) => Promise<TreatmentPlan>;
+
+  // KVKK Consent
+  getActiveConsent: (patientId: string) => Promise<KvkkConsent | null>;
+  recordConsent: (patientId: string, version: string) => Promise<KvkkConsent>;
+  revokeConsent: (patientId: string) => Promise<void>;
 
   // Risk Flags
   getRiskFlagsByPatient: (patientId: string) => Promise<RiskFlag[]>;
@@ -366,6 +371,32 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     return t;
   }, []);
 
+  // --- KVKK Consent ---
+  // Aktif rıza = geri çekilmemiş en güncel onay kaydı. Kayıtlar hiç silinmez
+  // (denetim izi); geri çekme revoked_at doldurularak yapılır.
+  const getActiveConsent = useCallback(async (patientId: string): Promise<KvkkConsent | null> => {
+    return getDb().getFirstAsync<KvkkConsent>(
+      'SELECT * FROM kvkk_consents WHERE patient_id=? AND revoked_at IS NULL ORDER BY consented_at DESC LIMIT 1',
+      [patientId]
+    );
+  }, []);
+
+  const recordConsent = useCallback(async (patientId: string, version: string): Promise<KvkkConsent> => {
+    const c: KvkkConsent = { id: generateId(), patient_id: patientId, version, consented_at: now() };
+    await getDb().runAsync(
+      'INSERT INTO kvkk_consents (id, patient_id, version, consented_at) VALUES (?,?,?,?)',
+      [c.id, c.patient_id, c.version, c.consented_at]
+    );
+    return c;
+  }, []);
+
+  const revokeConsent = useCallback(async (patientId: string) => {
+    await getDb().runAsync(
+      'UPDATE kvkk_consents SET revoked_at=? WHERE patient_id=? AND revoked_at IS NULL',
+      [now(), patientId]
+    );
+  }, []);
+
   // --- Risk Flags ---
   const getRiskFlagsByPatient = useCallback(async (patientId: string): Promise<RiskFlag[]> => {
     type RiskRow = Omit<RiskFlag, 'resolved'> & { resolved: number };
@@ -492,6 +523,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       getAssessmentsByPatient, addAssessment, deleteAssessment,
       getHomeworkByPatient, addHomework, updateHomework, deleteHomework,
       getTreatmentPlan, saveTreatmentPlan,
+      getActiveConsent, recordConsent, revokeConsent,
       getRiskFlagsByPatient, addRiskFlag, resolveRiskFlag, getActiveRiskFlags,
       books, loadBooks, addBook, updateBookPage, deleteBook,
       getAnnotationsByBook, addAnnotation, deleteAnnotation,

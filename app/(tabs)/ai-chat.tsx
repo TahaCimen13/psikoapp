@@ -8,7 +8,7 @@ import { colors, spacing, radius, typography } from '@/lib/theme';
 import type { ChatMessage, Patient } from '@/lib/types';
 
 export default function AIChat() {
-  const { settings, patients, addMessage, deleteConversation, getDiagnosesByPatient, getSessionsByPatient } = useDatabase();
+  const { settings, patients, addMessage, deleteConversation, getDiagnosesByPatient, getActiveConsent } = useDatabase();
   const router = useRouter();
   const [conversationId] = useState(generateId());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -66,6 +66,20 @@ export default function AIChat() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [input, hasApiKey, loading, addMessage, conversationId, messages, selectedPatient, settings.claude_api_key]);
 
+  // KVKK: rızası olmayan danışanın verisi AI bağlamına eklenemez
+  const selectPatient = useCallback(async (p: Patient) => {
+    const consent = await getActiveConsent(p.id);
+    if (!consent) {
+      Alert.alert(
+        'KVKK Rızası Gerekli',
+        `${p.name} için aktif KVKK rızası yok. Danışan verilerinin AI asistana gönderilebilmesi için önce hasta profilinden rıza kaydı alın.`
+      );
+      return;
+    }
+    setSelectedPatient(p);
+    setShowPatientPicker(false);
+  }, [getActiveConsent]);
+
   const clearChat = useCallback(() => {
     Alert.alert('Sohbeti Temizle', 'Tüm mesajlar kalıcı olarak silinecek. Emin misiniz?', [
       { text: 'İptal', style: 'cancel' },
@@ -118,7 +132,7 @@ export default function AIChat() {
             <Text style={styles.patientOptionText}>Hasta bağlamı olmadan devam et</Text>
           </TouchableOpacity>
           {patients.map(p => (
-            <TouchableOpacity key={p.id} style={styles.patientOption} onPress={() => { setSelectedPatient(p); setShowPatientPicker(false); }}>
+            <TouchableOpacity key={p.id} style={styles.patientOption} onPress={() => selectPatient(p)}>
               <Text style={styles.patientOptionText}>{p.name}</Text>
             </TouchableOpacity>
           ))}
