@@ -53,6 +53,9 @@ export default function AssessmentsScreen() {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>← Geri</Text></TouchableOpacity>
         <Text style={styles.title}>Değerlendirmeler</Text>
+        <TouchableOpacity style={styles.chartLink} onPress={() => router.push(`/patient/${id}/progress`)}>
+          <Text style={styles.chartLinkText}>📈</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.addBtn} onPress={() => setAdding(true)}>
           <Text style={styles.addBtnText}>+ Ekle</Text>
         </TouchableOpacity>
@@ -134,6 +137,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, paddingTop: spacing.xl + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
   back: { color: colors.accent, fontSize: 15, fontWeight: '600' },
   title: { flex: 1, ...typography.h3 },
+  chartLink: { padding: spacing.xs, marginRight: spacing.xs },
+  chartLinkText: { fontSize: 20 },
   addBtn: { backgroundColor: colors.accent, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6 },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   content: { padding: spacing.md, paddingBottom: 32 },
