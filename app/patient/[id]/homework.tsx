@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatabase } from '@/contexts/database-context';
@@ -82,7 +82,7 @@ export default function HomeworkScreen() {
       </ScrollView>
 
       <Modal visible={adding} transparent animationType="slide" onRequestClose={() => setAdding(false)}>
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Yeni Ödev</Text>
             <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="Ödev başlığı *" placeholderTextColor={colors.placeholder} />
@@ -97,7 +97,7 @@ export default function HomeworkScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

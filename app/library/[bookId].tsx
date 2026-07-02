@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, Modal, ScrollView, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, Modal, ScrollView, Linking, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
@@ -113,7 +113,7 @@ export default function BookReader() {
       </ScrollView>
 
       <Modal visible={addingAnnotation} transparent animationType="slide" onRequestClose={() => setAddingAnnotation(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Not Ekle</Text>
             <TextInput
@@ -136,7 +136,7 @@ export default function BookReader() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showAnnotations} transparent animationType="slide" onRequestClose={() => setShowAnnotations(false)}>

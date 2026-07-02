@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useDatabase } from '@/contexts/database-context';
@@ -27,7 +27,8 @@ export default function NewPatient() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.cancel}>İptal</Text>
@@ -64,6 +65,7 @@ export default function NewPatient() {
         <TextInput style={[styles.input, styles.textArea]} value={background} onChangeText={setBackground} placeholder="Hastanın başvuru nedeni, kısa anamnez..." placeholderTextColor={colors.placeholder} multiline numberOfLines={5} textAlignVertical="top" />
       </Field>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

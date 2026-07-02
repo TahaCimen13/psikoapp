@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatabase } from '@/contexts/database-context';
@@ -95,7 +95,7 @@ export default function DiagnosesScreen() {
       </ScrollView>
 
       <Modal visible={adding} transparent animationType="slide" onRequestClose={() => setAdding(false)}>
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Tanı Ekle</Text>
 
@@ -136,7 +136,7 @@ export default function DiagnosesScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

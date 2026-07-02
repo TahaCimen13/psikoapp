@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatabase } from '@/contexts/database-context';
@@ -80,7 +80,7 @@ export default function TreatmentScreen() {
   if (!loaded) return <View style={styles.container}><ActivityIndicator color={colors.accent} style={{ marginTop: 60 }} /></View>;
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>← Geri</Text></TouchableOpacity>
         <Text style={styles.title}>Tedavi Planı</Text>
@@ -120,7 +120,7 @@ export default function TreatmentScreen() {
         <Text style={styles.label}>Ek Notlar</Text>
         <TextInput style={[styles.input, { minHeight: 80 }]} value={notes} onChangeText={setNotes} placeholder="İlaç takibi, konsültasyon notları..." placeholderTextColor={colors.placeholder} multiline textAlignVertical="top" />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
