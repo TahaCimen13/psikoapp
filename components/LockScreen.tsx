@@ -1,12 +1,42 @@
-import { View, Text, StyleSheet, TouchableOpacity, Vibration } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Vibration, Alert } from 'react-native';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
+import { wipeAllData } from '@/lib/database';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 
 export default function LockScreen() {
   const { unlock, removePIN } = useAuth();
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
+
+  // PIN doğrulanmadan sıfırlama = tüm klinik verilerin silinmesi.
+  // Aksi halde kilit ekranı tek dokunuşla atlatılabilirdi.
+  const forgotPIN = () => {
+    Alert.alert(
+      "PIN'i mi unuttunuz?",
+      'Güvenlik nedeniyle PIN yalnızca tüm uygulama verileri (hastalar, seanslar, notlar) silinerek sıfırlanabilir. Bu işlem geri alınamaz.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Verileri Sil ve Sıfırla',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert('Emin misiniz?', 'TÜM veriler kalıcı olarak silinecek.', [
+              { text: 'Vazgeç', style: 'cancel' },
+              {
+                text: 'Evet, hepsini sil',
+                style: 'destructive',
+                onPress: async () => {
+                  await wipeAllData();
+                  await removePIN();
+                },
+              },
+            ]);
+          },
+        },
+      ]
+    );
+  };
 
   const handlePress = async (digit: string) => {
     if (pin.length >= 4) return;
@@ -67,8 +97,8 @@ export default function LockScreen() {
         ))}
       </View>
 
-      <TouchableOpacity onPress={removePIN} style={styles.resetBtn} activeOpacity={0.6}>
-        <Text style={styles.resetText}>PIN'i Sıfırla</Text>
+      <TouchableOpacity onPress={forgotPIN} style={styles.resetBtn} activeOpacity={0.6}>
+        <Text style={styles.resetText}>PIN'i unuttum</Text>
       </TouchableOpacity>
     </View>
   );

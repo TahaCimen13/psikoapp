@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { initDatabase } from '@/lib/database';
 import { DatabaseProvider } from '@/contexts/database-context';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
@@ -32,10 +32,32 @@ function AppContent() {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
 
-  useEffect(() => {
-    initDatabase().then(() => setReady(true));
+  const init = useCallback(() => {
+    setInitError(null);
+    initDatabase()
+      .then(() => setReady(true))
+      .catch(e => setInitError(e?.message || 'Veritabanı başlatılamadı.'));
   }, []);
+
+  useEffect(() => { init(); }, [init]);
+
+  if (initError) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+        <Text style={{ fontSize: 40, marginBottom: 12 }}>⚠️</Text>
+        <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', marginBottom: 8 }}>Uygulama başlatılamadı</Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 20 }}>{initError}</Text>
+        <TouchableOpacity
+          onPress={init}
+          style={{ backgroundColor: colors.accent, borderRadius: 10, paddingHorizontal: 24, paddingVertical: 12 }}
+        >
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Tekrar Dene</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (!ready) {
     return (

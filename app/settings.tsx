@@ -8,7 +8,7 @@ import { colors, spacing, radius, typography } from '@/lib/theme';
 export default function Settings() {
   const router = useRouter();
   const { settings, updateSettings } = useDatabase();
-  const { hasPIN, setupPIN, removePIN } = useAuth();
+  const { hasPIN, setupPIN, removePIN, autoLockMinutes, setAutoLockMinutes } = useAuth();
   const [apiKey, setApiKey] = useState('');
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
@@ -139,6 +139,26 @@ export default function Settings() {
         </View>
       )}
 
+      {pinEnabled && (
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleLabel}>Otomatik Kilit</Text>
+            <Text style={styles.toggleSub}>Arka plana geçince PIN iste</Text>
+            <View style={styles.autoLockRow}>
+              {AUTO_LOCK_OPTIONS.map(opt => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.autoLockChip, autoLockMinutes === opt.value && styles.autoLockChipActive]}
+                  onPress={() => setAutoLockMinutes(opt.value)}
+                >
+                  <Text style={[styles.autoLockChipText, autoLockMinutes === opt.value && styles.autoLockChipTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
+
       <SectionLabel label="AI Asistan" />
 
       <View style={styles.infoBox}>
@@ -170,6 +190,13 @@ function SectionLabel({ label }: { label: string }) {
   return <Text style={styles.sectionLabel}>{label}</Text>;
 }
 
+const AUTO_LOCK_OPTIONS = [
+  { value: 0, label: 'Hemen' },
+  { value: 1, label: '1 dk' },
+  { value: 5, label: '5 dk' },
+  { value: -1, label: 'Kapalı' },
+];
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md, paddingBottom: 40 },
@@ -183,6 +210,11 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.sm },
   toggleLabel: { ...typography.body, fontWeight: '600' },
   toggleSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  autoLockRow: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.sm },
+  autoLockChip: { borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 4, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.cardBorder },
+  autoLockChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  autoLockChipText: { fontSize: 12, color: colors.text },
+  autoLockChipTextActive: { color: '#fff', fontWeight: '600' },
   pinForm: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.sm, gap: spacing.sm },
   pinFormTitle: { ...typography.label },
   pinInput: { backgroundColor: colors.inputBg, color: colors.text, borderRadius: radius.md, padding: spacing.sm, fontSize: 20, borderWidth: 1, borderColor: colors.cardBorder, textAlign: 'center', letterSpacing: 8 },

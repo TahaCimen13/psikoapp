@@ -154,6 +154,27 @@ export async function initDatabase(): Promise<void> {
   await runMigrations();
 }
 
+// PIN unutulduğunda kullanılır: kilidin amacı veri koruması olduğundan
+// PIN doğrulanmadan sıfırlama ancak tüm verilerin silinmesiyle mümkündür.
+export async function wipeAllData(): Promise<void> {
+  if (!db) return;
+  await db.execAsync(`
+    DELETE FROM chat_messages;
+    DELETE FROM book_annotations;
+    DELETE FROM books;
+    DELETE FROM risk_flags;
+    DELETE FROM treatment_plans;
+    DELETE FROM homework;
+    DELETE FROM assessments;
+    DELETE FROM diagnoses;
+    DELETE FROM session_notes;
+    DELETE FROM sessions;
+    DELETE FROM appointments;
+    DELETE FROM patients;
+    DELETE FROM app_settings;
+  `);
+}
+
 async function runMigrations(): Promise<void> {
   if (!db) return;
 
