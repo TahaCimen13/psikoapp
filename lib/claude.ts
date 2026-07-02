@@ -1,4 +1,9 @@
+import { fetch } from 'expo/fetch';
 import type { Patient, Session, SessionNote, Diagnosis, Assessment } from './types';
+
+const API_URL = 'https://api.anthropic.com/v1/messages';
+const MODEL = 'claude-sonnet-5';
+const MAX_TOKENS = 2048;
 
 const BASE_SYSTEM = `Sen deneyimli bir klinik psikolog asistanısın. Türkçe konuşuyorsun.
 
@@ -18,30 +23,50 @@ ETİK KURALLAR:
 
 Yanıtların kısa, net ve klinisyene pratik fayda sağlayacak şekilde olsun.`;
 
-async function callClaude(apiKey: string, system: string, userMessage: string): Promise<string> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      system,
-      messages: [{ role: 'user', content: userMessage }],
-    }),
-  });
+type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`API hatası: ${response.status} - ${err}`);
+// ---- Hata yönetimi (Türkçe, kullanıcıya gösterilebilir mesajlar) ----
+
+function apiError(status: number): Error {
+  let msg: string;
+  if (status === 401) {
+    msg = 'API anahtarı geçersiz veya süresi dolmuş. Ayarlar ekranından anahtarınızı kontrol edin.';
+  } else if (status === 403) {
+    msg = 'API anahtarınızın bu işlem için yetkisi yok. Ayarlardan anahtarınızı kontrol edin.';
+  } else if (status === 404) {
+    msg = 'AI modeli bulunamadı. Uygulamayı güncellemeniz gerekebilir.';
+  } else if (status === 413) {
+    msg = 'Gönderilen içerik çok uzun. Lütfen mesajınızı kısaltıp tekrar deneyin.';
+  } else if (status === 429) {
+    msg = 'Çok fazla istek gönderildi. Lütfen bir dakika bekleyip tekrar deneyin.';
+  } else if (status >= 500) {
+    msg = 'AI servisi şu anda yoğun veya geçici bir sorun yaşıyor. Lütfen kısa bir süre sonra tekrar deneyin.';
+  } else if (status === 400) {
+    msg = 'İstek işlenemedi. Lütfen mesajınızı düzenleyip tekrar deneyin.';
+  } else {
+    msg = `Beklenmeyen bir hata oluştu (kod: ${status}). Lütfen tekrar deneyin.`;
   }
+  return new Error(msg);
+}
 
-  const data = await response.json();
-  const block = data.content?.[0];
-  return block?.type === 'text' ? block.text : '';
+function networkError(): Error {
+  return new Error('AI servisine ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+}
+
+// ---- Gizlilik (KVKK): hasta adı API'ye asla gönderilmez ----
+
+/**
+ * Hastanın gerçek adı yerine yalnızca baş harflerini içeren
+ * anonim bir etiket döndürür (örn. "Ayşe Yılmaz" -> "Danışan A.Y.").
+ */
+function anonymizePatientName(name?: string): string {
+  const trimmed = name?.trim();
+  if (!trimmed) return 'Danışan';
+  const initials = trimmed
+    .split(/\s+/)
+    .map(part => part.charAt(0).toLocaleUpperCase('tr-TR') + '.')
+    .join('');
+  return `Danışan ${initials}`;
 }
 
 function buildPatientContext(patient: Patient, diagnoses: Diagnosis[]): string {
@@ -51,38 +76,44 @@ function buildPatientContext(patient: Patient, diagnoses: Diagnosis[]): string {
   const diagList = diagnoses.length > 0
     ? diagnoses.map(d => `${d.dsm_name || d.dsm_code} (${d.severity || 'şiddet belirtilmemiş'})`).join(', ')
     : 'henüz tanı yok';
-  return `Hasta: ${patient.name} | Yaş: ${age} | Tanılar: ${diagList} | Başvuru: ${patient.background || 'belirtilmemiş'}`;
+  // KVKK: gerçek ad yerine anonim etiket kullanılır
+  return `Hasta: ${anonymizePatientName(patient.name)} | Yaş: ${age} | Tanılar: ${diagList} | Başvuru: ${patient.background || 'belirtilmemiş'}`;
 }
 
-// Genel AI sohbeti
-export async function sendMessage(
-  apiKey: string,
-  messages: { role: 'user' | 'assistant'; content: string }[],
-  patientContext?: { patient: Patient; diagnoses: Diagnosis[] }
-): Promise<string> {
-  let system = BASE_SYSTEM;
-  if (patientContext) {
-    system += `\n\n--- HASTA BAĞLAMI ---\n${buildPatientContext(patientContext.patient, patientContext.diagnoses)}`;
+// ---- Temel API çağrıları ----
+
+function requestBody(system: string, messages: ChatTurn[], stream: boolean) {
+  return JSON.stringify({
+    model: MODEL,
+    max_tokens: MAX_TOKENS,
+    system,
+    messages,
+    ...(stream ? { stream: true } : {}),
+  });
+}
+
+function requestHeaders(apiKey: string) {
+  return {
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+  };
+}
+
+async function createMessage(apiKey: string, system: string, messages: ChatTurn[]): Promise<string> {
+  let response: Awaited<ReturnType<typeof fetch>>;
+  try {
+    response = await fetch(API_URL, {
+      method: 'POST',
+      headers: requestHeaders(apiKey),
+      body: requestBody(system, messages, false),
+    });
+  } catch {
+    throw networkError();
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      system,
-      messages,
-    }),
-  });
-
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`API hatası: ${response.status} - ${err}`);
+    throw apiError(response.status);
   }
 
   const data = await response.json();
@@ -90,7 +121,117 @@ export async function sendMessage(
   return block?.type === 'text' ? block.text : '';
 }
 
-// Seans özeti oluştur
+/**
+ * SSE streaming ile mesaj oluşturur. Her metin parçası geldiğinde
+ * onChunk çağrılır; tamamlanan metnin tamamı döndürülür.
+ */
+async function streamMessage(
+  apiKey: string,
+  system: string,
+  messages: ChatTurn[],
+  onChunk: (chunk: string) => void
+): Promise<string> {
+  let response: Awaited<ReturnType<typeof fetch>>;
+  try {
+    response = await fetch(API_URL, {
+      method: 'POST',
+      headers: requestHeaders(apiKey),
+      body: requestBody(system, messages, true),
+    });
+  } catch {
+    throw networkError();
+  }
+
+  if (!response.ok) {
+    throw apiError(response.status);
+  }
+
+  const body = response.body;
+  if (!body) {
+    throw new Error('Akış başlatılamadı. Lütfen tekrar deneyin.');
+  }
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE satırlarını işle; son eksik satırı tamponda tut
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+
+        let event: any;
+        try {
+          event = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+          const text: string = event.delta.text ?? '';
+          if (text) {
+            fullText += text;
+            onChunk(text);
+          }
+        } else if (event.type === 'error') {
+          throw new Error(
+            event.error?.type === 'overloaded_error'
+              ? 'AI servisi şu anda yoğun. Lütfen kısa bir süre sonra tekrar deneyin.'
+              : 'Yanıt alınırken bir hata oluştu. Lütfen tekrar deneyin.'
+          );
+        }
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {}
+  }
+
+  return fullText;
+}
+
+async function callClaude(apiKey: string, system: string, userMessage: string): Promise<string> {
+  return createMessage(apiKey, system, [{ role: 'user', content: userMessage }]);
+}
+
+// ---- Genel AI sohbeti ----
+
+/**
+ * AI sohbet mesajı gönderir. onChunk verilirse yanıt SSE streaming ile
+ * parça parça iletilir; her durumda tam yanıt metni döndürülür.
+ */
+export async function sendMessage(
+  apiKey: string,
+  messages: ChatTurn[],
+  patientContext?: { patient: Patient; diagnoses: Diagnosis[] },
+  onChunk?: (chunk: string) => void
+): Promise<string> {
+  let system = BASE_SYSTEM;
+  if (patientContext) {
+    system += `\n\n--- HASTA BAĞLAMI ---\n${buildPatientContext(patientContext.patient, patientContext.diagnoses)}`;
+  }
+
+  if (onChunk) {
+    return streamMessage(apiKey, system, messages, onChunk);
+  }
+  return createMessage(apiKey, system, messages);
+}
+
+// ---- Seans özeti oluştur ----
+
 export async function generateSessionSummary(
   apiKey: string,
   patient: Patient,
@@ -99,12 +240,13 @@ export async function generateSessionSummary(
 ): Promise<string> {
   const noteText = notes.map(n => `[${n.category.toUpperCase()}] ${n.content}`).join('\n');
   const system = `${BASE_SYSTEM}\n\nGörevin: Seans notlarından kısa, yapılandırılmış bir klinik özet çıkarmak. Format: (1) Ana Bulgular (2) Ruh Hali & Davranış (3) Müdahaleler (4) Sonraki Adımlar`;
-  const prompt = `Hasta: ${patient.name}, Yaklaşım: ${session.approach || 'belirtilmemiş'}, Süre: ${session.duration || '?'} dk\n\nSeans Notları:\n${noteText || 'Not girilmemiş.'}`;
+  const prompt = `Hasta: ${anonymizePatientName(patient.name)}, Yaklaşım: ${session.approach || 'belirtilmemiş'}, Süre: ${session.duration || '?'} dk\n\nSeans Notları:\n${noteText || 'Not girilmemiş.'}`;
 
   return callClaude(apiKey, system, prompt);
 }
 
-// Vaka formülasyonu oluştur
+// ---- Vaka formülasyonu oluştur ----
+
 export async function generateCaseFormulation(
   apiKey: string,
   patient: Patient,
@@ -119,7 +261,8 @@ export async function generateCaseFormulation(
   return callClaude(apiKey, system, prompt);
 }
 
-// Müdahale önerileri
+// ---- Müdahale önerileri ----
+
 export async function suggestInterventions(
   apiKey: string,
   patient: Patient,
@@ -132,7 +275,39 @@ export async function suggestInterventions(
   return callClaude(apiKey, system, prompt);
 }
 
-// Risk göstergesi tespiti
+// ---- Ayırıcı tanı yardımcısı ----
+
+/**
+ * Mevcut tanılar ve seans notu özetlerinden DSM-5-TR kriterleri üzerinden
+ * ayırıcı tanı değerlendirmesi üretir. Kesin tanı koymaz; hangi tanıların
+ * değerlendirilmesi/dışlanması gerektiğini ve ek bilgi ihtiyaçlarını listeler.
+ */
+export async function generateDifferentialDiagnosis(
+  apiKey: string,
+  patient: Patient,
+  diagnoses: Diagnosis[],
+  sessions: Session[]
+): Promise<string> {
+  const system = `${BASE_SYSTEM}\n\nGörevin: Ayırıcı tanı değerlendirmesine yardımcı olmak. DSM-5-TR kriterleri üzerinden:
+(1) Mevcut tanıları destekleyen ve desteklemeyen bulguları özetle
+(2) Değerlendirilmesi gereken alternatif tanıları ve dışlanması gereken durumları (tıbbi nedenler, madde etkisi dahil) belirt
+(3) Her alternatif için ayrım sağlayacak anahtar kriterleri açıkla
+(4) Ayrım için sorulacak soruları ve uygun ölçme araçlarını öner
+UNUTMA: Kesin tanı koyma; nihai klinik karar psikoloğa aittir.`;
+
+  const summaries = sessions
+    .filter(s => s.summary)
+    .slice(0, 6)
+    .map(s => `Seans #${s.session_number ?? '?'}: ${s.summary}`)
+    .join('\n');
+
+  const prompt = `${buildPatientContext(patient, diagnoses)}\n\nSeans Özetleri:\n${summaries || 'Henüz seans özeti yok.'}\n\nBu bilgilere dayanarak yapılandırılmış bir ayırıcı tanı değerlendirmesi hazırla.`;
+
+  return callClaude(apiKey, system, prompt);
+}
+
+// ---- Risk göstergesi tespiti ----
+
 export async function detectRiskIndicators(
   apiKey: string,
   notes: SessionNote[]
@@ -151,7 +326,8 @@ export async function detectRiskIndicators(
   return { hasRisk: false, level: 'belirsiz', summary: raw };
 }
 
-// Psikoeğitim metni oluştur
+// ---- Psikoeğitim metni oluştur ----
+
 export async function generatePsychoeducation(
   apiKey: string,
   topic: string,
@@ -164,7 +340,8 @@ export async function generatePsychoeducation(
   return callClaude(apiKey, system, prompt);
 }
 
-// Seans hazırlığı
+// ---- Seans hazırlığı ----
+
 export async function prepareSession(
   apiKey: string,
   patient: Patient,

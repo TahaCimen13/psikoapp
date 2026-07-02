@@ -2,18 +2,19 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Keyboa
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useDatabase } from '@/contexts/database-context';
-import { sendMessage } from '@/lib/claude';
+import { sendMessage, generateDifferentialDiagnosis } from '@/lib/claude';
 import { generateId } from '@/lib/id';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 import type { ChatMessage, Patient } from '@/lib/types';
 
 export default function AIChat() {
-  const { settings, patients, getMessages, addMessage, deleteConversation, getDiagnosesByPatient } = useDatabase();
+  const { settings, patients, addMessage, deleteConversation, getDiagnosesByPatient, getSessionsByPatient } = useDatabase();
   const router = useRouter();
   const [conversationId] = useState(generateId());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showPatientPicker, setShowPatientPicker] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
@@ -34,6 +35,7 @@ export default function AIChat() {
     setMessages(prev => [...prev, userMsg]);
 
     setLoading(true);
+    setStreamingText('');
     try {
       const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
 
@@ -43,7 +45,10 @@ export default function AIChat() {
         patientContext = { patient: selectedPatient, diagnoses };
       }
 
-      const reply = await sendMessage(settings.claude_api_key!, history, patientContext);
+      // Streaming: yanıt geldikçe ekrana yaz
+      const reply = await sendMessage(settings.claude_api_key!, history, patientContext, chunk => {
+        setStreamingText(prev => prev + chunk);
+      });
       const assistantMsg = await addMessage({
         conversation_id: conversationId,
         patient_id: selectedPatient?.id,
@@ -55,17 +60,57 @@ export default function AIChat() {
       Alert.alert('Hata', e.message || 'Mesaj gönderilemedi. API anahtarını kontrol edin.');
     } finally {
       setLoading(false);
+      setStreamingText('');
     }
 
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [input, hasApiKey, loading, addMessage, conversationId, messages, selectedPatient, settings.claude_api_key]);
 
+  // Hasta bağlamı seçiliyken tek dokunuşla ayırıcı tanı değerlendirmesi
+  const runDifferential = useCallback(async () => {
+    if (!selectedPatient || !hasApiKey || loading) return;
+    setLoading(true);
+    setStreamingText('');
+    try {
+      const [diagnoses, sessions] = await Promise.all([
+        getDiagnosesByPatient(selectedPatient.id),
+        getSessionsByPatient(selectedPatient.id),
+      ]);
+      const userMsg = await addMessage({
+        conversation_id: conversationId,
+        patient_id: selectedPatient.id,
+        role: 'user',
+        content: `${selectedPatient.name} için ayırıcı tanı değerlendirmesi hazırla.`,
+      });
+      setMessages(prev => [...prev, userMsg]);
+
+      const reply = await generateDifferentialDiagnosis(settings.claude_api_key!, selectedPatient, diagnoses, sessions);
+      const assistantMsg = await addMessage({
+        conversation_id: conversationId,
+        patient_id: selectedPatient.id,
+        role: 'assistant',
+        content: reply,
+      });
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (e: any) {
+      Alert.alert('Hata', e.message || 'Ayırıcı tanı değerlendirmesi oluşturulamadı.');
+    } finally {
+      setLoading(false);
+    }
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [selectedPatient, hasApiKey, loading, getDiagnosesByPatient, getSessionsByPatient, addMessage, conversationId, settings.claude_api_key]);
+
   const clearChat = useCallback(() => {
-    Alert.alert('Sohbeti Temizle', 'Tüm mesajlar silinecek. Emin misiniz?', [
+    Alert.alert('Sohbeti Temizle', 'Tüm mesajlar kalıcı olarak silinecek. Emin misiniz?', [
       { text: 'İptal', style: 'cancel' },
-      { text: 'Temizle', style: 'destructive', onPress: () => setMessages([]) },
+      {
+        text: 'Temizle', style: 'destructive', onPress: async () => {
+          await deleteConversation(conversationId);
+          setMessages([]);
+        },
+      },
     ]);
-  }, []);
+  }, [deleteConversation, conversationId]);
 
   if (!hasApiKey) {
     return (
@@ -132,12 +177,28 @@ export default function AIChat() {
         {messages.map(msg => (
           <ChatBubble key={msg.id} message={msg} />
         ))}
-        {loading && (
+        {loading && streamingText.length > 0 && (
+          <View style={[styles.bubbleWrapper, styles.assistantWrapper]}>
+            <Text style={styles.botIcon}>🤖</Text>
+            <View style={[styles.bubble, styles.assistantBubble]}>
+              <Text style={styles.bubbleText}>{streamingText}</Text>
+            </View>
+          </View>
+        )}
+        {loading && streamingText.length === 0 && (
           <View style={[styles.bubble, styles.assistantBubble]}>
             <ActivityIndicator color={colors.accent} size="small" />
           </View>
         )}
       </ScrollView>
+
+      {selectedPatient && !loading && (
+        <View style={styles.quickActions}>
+          <TouchableOpacity style={styles.quickAction} onPress={runDifferential}>
+            <Text style={styles.quickActionText}>🧠 Ayırıcı Tanı Değerlendirmesi</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.inputRow}>
         <TextInput
@@ -148,7 +209,6 @@ export default function AIChat() {
           onChangeText={setInput}
           multiline
           maxLength={2000}
-          onSubmitEditing={send}
         />
         <TouchableOpacity style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]} onPress={send} disabled={!input.trim() || loading}>
           <Text style={styles.sendBtnText}>↑</Text>
@@ -205,6 +265,9 @@ const styles = StyleSheet.create({
   assistantBubble: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 21 },
   userBubbleText: { color: '#fff' },
+  quickActions: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
+  quickAction: { backgroundColor: colors.accentDim, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 8, borderWidth: 1, borderColor: colors.accent + '40' },
+  quickActionText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   inputRow: { flexDirection: 'row', padding: spacing.sm, gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.cardBorder, backgroundColor: colors.card },
   input: { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: colors.cardBorder },
   sendBtn: { backgroundColor: colors.accent, width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-end' },

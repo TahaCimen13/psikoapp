@@ -1,7 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
+import { generateSessionSummary } from '@/lib/claude';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 import type { Session, SessionNote } from '@/lib/types';
 import { NOTE_CATEGORIES } from '@/lib/types';
@@ -9,7 +10,7 @@ import { NOTE_CATEGORIES } from '@/lib/types';
 export default function SessionDetail() {
   const { id, sessionId } = useLocalSearchParams<{ id: string; sessionId: string }>();
   const router = useRouter();
-  const { getSession, getNotesBySession, addNote, updateNote, deleteNote, updateSession, deleteSession } = useDatabase();
+  const { getSession, getNotesBySession, addNote, updateNote, deleteNote, updateSession, deleteSession, getPatient, settings } = useDatabase();
 
   const [session, setSession] = useState<Session | null>(null);
   const [notes, setNotes] = useState<SessionNote[]>([]);
@@ -19,6 +20,7 @@ export default function SessionDetail() {
   const [editContent, setEditContent] = useState('');
   const [summaryEdit, setSummaryEdit] = useState('');
   const [editingSummary, setEditingSummary] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const load = useCallback(async () => {
     const [s, n] = await Promise.all([getSession(sessionId), getNotesBySession(sessionId)]);
@@ -63,6 +65,31 @@ export default function SessionDetail() {
     load();
   };
 
+  // Seans notlarından AI ile özet üret; kaydetmeden önce düzenleme modunda göster
+  const generateAISummary = async () => {
+    if (!session || aiLoading) return;
+    if (!settings.claude_api_key) {
+      Alert.alert('API Anahtarı Gerekli', 'AI özet için Ayarlar ekranından Claude API anahtarınızı girin.');
+      return;
+    }
+    if (notes.length === 0) {
+      Alert.alert('Not Yok', 'Özet üretmek için önce seans notu ekleyin.');
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const patient = await getPatient(id);
+      if (!patient) throw new Error('Hasta bulunamadı.');
+      const summary = await generateSessionSummary(settings.claude_api_key, patient, session, notes);
+      setSummaryEdit(summary);
+      setEditingSummary(true);
+    } catch (e: any) {
+      Alert.alert('Hata', e.message || 'AI özet oluşturulamadı.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const confirmDeleteSession = () => {
     Alert.alert('Seansı Sil', 'Bu seans ve tüm notlar silinecek.', [
       { text: 'İptal', style: 'cancel' },
@@ -94,21 +121,34 @@ export default function SessionDetail() {
           <View style={styles.sessionMeta}>
             <MetaChip label={`Seans #${session.session_number || '-'}`} />
             <MetaChip label={`${session.duration || '?'} dk`} />
+            {session.approach ? <MetaChip label={session.approach} /> : null}
+            {session.mood_rating ? <MetaChip label={`Duygu: ${session.mood_rating}/10`} /> : null}
           </View>
         </View>
 
         <View style={styles.summaryBox}>
           <View style={styles.summaryHeader}>
             <Text style={styles.summaryLabel}>Seans Özeti</Text>
-            {!editingSummary ? (
-              <TouchableOpacity onPress={() => setEditingSummary(true)}>
-                <Text style={styles.editBtn}>Düzenle</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={saveSummary}>
-                <Text style={styles.editBtn}>Kaydet</Text>
-              </TouchableOpacity>
-            )}
+            <View style={styles.summaryActions}>
+              {!editingSummary && (
+                aiLoading ? (
+                  <ActivityIndicator color={colors.accent} size="small" />
+                ) : (
+                  <TouchableOpacity onPress={generateAISummary}>
+                    <Text style={styles.editBtn}>✨ AI Özet</Text>
+                  </TouchableOpacity>
+                )
+              )}
+              {!editingSummary ? (
+                <TouchableOpacity onPress={() => setEditingSummary(true)}>
+                  <Text style={styles.editBtn}>Düzenle</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={saveSummary}>
+                  <Text style={styles.editBtn}>Kaydet</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
           {editingSummary ? (
             <TextInput
@@ -225,6 +265,7 @@ const styles = StyleSheet.create({
   metaChipText: { color: colors.accentLight, fontSize: 12, fontWeight: '500' },
   summaryBox: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.cardBorder },
   summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
+  summaryActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   summaryLabel: { ...typography.label },
   editBtn: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   summaryText: { color: colors.textSecondary, fontSize: 14, lineHeight: 22 },
