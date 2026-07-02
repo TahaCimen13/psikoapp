@@ -433,7 +433,9 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const updateSettings = useCallback(async (data: Partial<AppSettings>) => {
     const db = getDb();
     for (const [key, value] of Object.entries(data)) {
-      if (value !== undefined) {
+      if (value === undefined || value === '') {
+        await db.runAsync('DELETE FROM app_settings WHERE key=?', [key]);
+      } else {
         await db.runAsync('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?,?)', [key, value as string]);
       }
     }
