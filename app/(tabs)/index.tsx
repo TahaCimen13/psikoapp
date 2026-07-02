@@ -1,28 +1,32 @@
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useEffect, useState, useCallback } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography } from '@/lib/theme';
-import type { Session, Patient } from '@/lib/types';
+import { RISK_LEVELS, RISK_CATEGORIES, RISK_LEVEL_ORDER } from '@/components/RiskBadge';
+import type { Session, RiskFlag } from '@/lib/types';
 
 interface TodaySession extends Session {
   patient_name: string;
 }
 
 export default function Dashboard() {
-  const { getTodaySessions, patients, getStats, settings } = useDatabase();
+  const { getTodaySessions, patients, getStats, settings, getActiveRiskFlags } = useDatabase();
   const router = useRouter();
   const [todaySessions, setTodaySessions] = useState<TodaySession[]>([]);
+  const [activeRisks, setActiveRisks] = useState<(RiskFlag & { patient_name: string })[]>([]);
   const [stats, setStats] = useState({ totalPatients: 0, monthSessions: 0, activeDiagnoses: 0, activeRisks: 0 });
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [sessions, s] = await Promise.all([getTodaySessions(), getStats()]);
+    const [sessions, s, risks] = await Promise.all([getTodaySessions(), getStats(), getActiveRiskFlags()]);
     setTodaySessions(sessions);
     setStats(s);
-  }, [getTodaySessions, getStats]);
+    setActiveRisks([...risks].sort((a, b) => RISK_LEVEL_ORDER[b.level] - RISK_LEVEL_ORDER[a.level]));
+  }, [getTodaySessions, getStats, getActiveRiskFlags]);
 
-  useEffect(() => { load(); }, [load]);
+  // Sekmeye her dönüşte verileri yenile
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -63,6 +67,31 @@ export default function Dashboard() {
         <StatCard label="Aktif Tanı" value={stats.activeDiagnoses} emoji="📋" />
         {stats.activeRisks > 0 && <StatCard label="Risk" value={stats.activeRisks} emoji="⚠️" alert />}
       </View>
+
+      {activeRisks.length > 0 && (
+        <>
+          <SectionHeader title="Aktif Riskler" />
+          {activeRisks.slice(0, 4).map(risk => (
+            <TouchableOpacity
+              key={risk.id}
+              style={[styles.riskCard, { borderColor: RISK_LEVELS[risk.level].color + '80' }]}
+              onPress={() => router.push(`/patient/${risk.patient_id}/risk`)}
+            >
+              <View style={[styles.riskDot, { backgroundColor: RISK_LEVELS[risk.level].color }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.patientName}>{risk.patient_name}</Text>
+                <Text style={styles.sessionMeta}>{RISK_CATEGORIES[risk.category]}</Text>
+              </View>
+              <View style={[styles.badge, { backgroundColor: RISK_LEVELS[risk.level].color + '22' }]}>
+                <Text style={[styles.badgeText, { color: RISK_LEVELS[risk.level].color }]}>{RISK_LEVELS[risk.level].label}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+          {activeRisks.length > 4 && (
+            <Text style={styles.moreRiskText}>+ {activeRisks.length - 4} risk daha</Text>
+          )}
+        </>
+      )}
 
       <SectionHeader title="Bugünün Seansları" />
       {todaySessions.length === 0 ? (
@@ -178,6 +207,9 @@ const styles = StyleSheet.create({
   arrow: { color: colors.textMuted, fontSize: 20 },
   emptyCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.sm },
   emptyText: { color: colors.textMuted, fontSize: 14 },
+  riskCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm, borderWidth: 1 },
+  riskDot: { width: 10, height: 10, borderRadius: 5 },
+  moreRiskText: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginBottom: spacing.sm },
   addBtn: { backgroundColor: colors.accent, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.md },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

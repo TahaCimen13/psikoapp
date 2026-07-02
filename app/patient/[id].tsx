@@ -1,35 +1,40 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState, useCallback } from 'react';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography } from '@/lib/theme';
-import type { Patient, Session, Diagnosis, Homework } from '@/lib/types';
+import { RISK_LEVELS, RISK_CATEGORIES, highestRiskFlag } from '@/components/RiskBadge';
+import type { Patient, Session, Diagnosis, Homework, RiskFlag } from '@/lib/types';
 
 export default function PatientProfile() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getPatient, getSessionsByPatient, getDiagnosesByPatient, getHomeworkByPatient, deletePatient } = useDatabase();
+  const { getPatient, getSessionsByPatient, getDiagnosesByPatient, getHomeworkByPatient, getRiskFlagsByPatient, deletePatient } = useDatabase();
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
+  const [riskFlags, setRiskFlags] = useState<RiskFlag[]>([]);
   const [pendingHw, setPendingHw] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [p, s, d, hw] = await Promise.all([
+    const [p, s, d, hw, rf] = await Promise.all([
       getPatient(id),
       getSessionsByPatient(id),
       getDiagnosesByPatient(id),
       getHomeworkByPatient(id),
+      getRiskFlagsByPatient(id),
     ]);
     setPatient(p);
     setSessions(s);
     setDiagnoses(d);
+    setRiskFlags(rf);
     setPendingHw(hw.filter((h: Homework) => h.status === 'pending').length);
-  }, [id, getPatient, getSessionsByPatient, getDiagnosesByPatient, getHomeworkByPatient]);
+  }, [id, getPatient, getSessionsByPatient, getDiagnosesByPatient, getHomeworkByPatient, getRiskFlagsByPatient]);
 
-  useEffect(() => { load(); }, [load]);
+  // Ekrana her dönüşte verileri yenile (alt ekranlardan dönüşler dahil)
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -60,6 +65,8 @@ export default function PatientProfile() {
 
   const primaryDiag = diagnoses.find(d => d.is_primary) || diagnoses[0];
   const recentSessions = sessions.slice(0, 3);
+  const activeRiskCount = riskFlags.filter(f => !f.resolved).length;
+  const topRisk = highestRiskFlag(riskFlags);
 
   return (
     <View style={styles.container}>
@@ -73,6 +80,19 @@ export default function PatientProfile() {
       </View>
 
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}>
+        {/* Aktif risk uyarı bandı */}
+        {topRisk && (
+          <TouchableOpacity
+            style={[styles.riskBand, { backgroundColor: RISK_LEVELS[topRisk.level].color }]}
+            onPress={() => router.push(`/patient/${id}/risk`)}
+          >
+            <Text style={styles.riskBandText}>
+              ⚠️ Aktif Risk: {RISK_LEVELS[topRisk.level].label} — {RISK_CATEGORIES[topRisk.category]}
+            </Text>
+            <Text style={styles.riskBandArrow}>›</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Profil */}
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
@@ -96,6 +116,8 @@ export default function PatientProfile() {
           <ActionCard emoji="📊" title="Değerlendirme" subtitle="Test sonuçları" onPress={() => router.push(`/patient/${id}/assessments`)} />
           <ActionCard emoji="📝" title="Ödevler" subtitle={pendingHw > 0 ? `${pendingHw} bekliyor` : 'Ödev yok'} badge={pendingHw > 0} onPress={() => router.push(`/patient/${id}/homework`)} />
           <ActionCard emoji="🎯" title="Tedavi Planı" subtitle="Hedef & teknikler" onPress={() => router.push(`/patient/${id}/treatment`)} />
+          <ActionCard emoji="⚠️" title="Risk Takibi" subtitle={activeRiskCount > 0 ? `${activeRiskCount} aktif risk` : 'Aktif risk yok'} badge={activeRiskCount > 0} onPress={() => router.push(`/patient/${id}/risk`)} />
+          <ActionCard emoji="📈" title="İlerleme" subtitle="Skor & grafik" onPress={() => router.push(`/patient/${id}/progress`)} />
         </View>
 
         {/* Seanslar */}
@@ -198,4 +220,7 @@ const styles = StyleSheet.create({
   empty: { padding: spacing.lg, alignItems: 'center' },
   emptyText: { color: colors.textMuted, fontSize: 14 },
   moreText: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginTop: 4 },
+  riskBand: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: spacing.md, marginBottom: spacing.md, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  riskBandText: { color: '#fff', fontWeight: '700', fontSize: 13, flex: 1 },
+  riskBandArrow: { color: '#fff', fontSize: 18, fontWeight: '700', marginLeft: spacing.sm },
 });
