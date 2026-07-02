@@ -33,7 +33,7 @@ export const DSM5_DATA: DSMChapter[] = [
           'B. Birkac dikkat eksikligi veya hiperaktivite-durtuselligi semptomu 12 yasindan once mevcut',
           'C. Birkac semptom iki veya daha fazla ortamda mevcut',
           'D. Sosyal, akademik veya is islevselligini olumsuz etkiledigine dair acik kanit',
-          'E. Schizofreni veya baska psikotik bozukluk ile daha iyi aciklanamaz',
+          'E. Sizofreni veya baska psikotik bozukluk ile daha iyi aciklanamaz',
         ],
         severity_specifiers: ['Hafif', 'Orta', 'Agir'],
       },
@@ -114,7 +114,7 @@ export const DSM5_DATA: DSMChapter[] = [
           'C. 2 yillik donem boyunca semptomlar 2 aydan fazla sureli hic olmamis',
           'D. Major depresif bozuklugun kriterleri surdurulebilir bicimde gosteriliyor olabilir',
           'E. Manik veya hipomanik atak hic olmamis',
-          'F. Schizofreni spektrumu veya baska psikotik bozuklukla aciklanamaz',
+          'F. Sizofreni spektrumu veya baska psikotik bozuklukla aciklanamaz',
           'G. Bir maddenin veya baska tibbi durumun etkisine bagli degil',
           'H. Belirtiler klinik olarak anlamli sikintiyi veya bozulmayı yol aciyor',
         ],
@@ -301,12 +301,12 @@ export const DSM5_DATA: DSMChapter[] = [
     ],
   },
   {
-    title: 'Schizofreni Spektrumu ve Diger Psikotik Bozukluklar',
+    title: 'Sizofreni Spektrumu ve Diger Psikotik Bozukluklar',
     diagnoses: [
       {
         code: 'F20.9',
-        name: 'Schizofreni',
-        chapter: 'Schizofreni Spektrumu ve Diger Psikotik Bozukluklar',
+        name: 'Sizofreni',
+        chapter: 'Sizofreni Spektrumu ve Diger Psikotik Bozukluklar',
         criteria: [
           'A. Asagidakilerden 2 veya daha fazlasi, 1 aylik donemde onemli bir bolumunde mevcut; en az birinin (1), (2) veya (3) olmasi gerekir',
           '1. Sanrilar',
@@ -315,7 +315,7 @@ export const DSM5_DATA: DSMChapter[] = [
           '4. Ileri derecede dagilmis veya katatonik davranis',
           '5. Negatif belirtiler (azalmis duygusal ifade veya avolition)',
           'B. En az 6 aylik bozulma suresince mesleki veya kisisel islevsellikte belirgin duzeyde azalma',
-          'C. Schizoaffektif bozukluk ve depresif veya bipolar bozukluk dislanmistir',
+          'C. Sizoaffektif bozukluk ve depresif veya bipolar bozukluk dislanmistir',
           'D. Madde veya tibbi durumun fizyolojik etkilerine bagli degil',
           'E. Otizm spektrum bozuklugu veya cocukluk cagi iletisim bozuklugu ile iliskisi degerlendirilmeli',
         ],
@@ -431,16 +431,37 @@ export const DSM5_DATA: DSMChapter[] = [
   },
 ];
 
+// Türkçe büyük İ/ı ve aksan farklarını arama dışı bırakmak için ASCII'ye indirger
+const TR_FOLD: Record<string, string> = { 'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u' };
+
+function foldTurkish(text: string): string {
+  return text
+    .toLocaleLowerCase('tr')
+    .normalize('NFD')
+    .replace(/̇/g, '') // İ → i̇ dönüşümündeki combining dot
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[çğıöşü]/g, c => TR_FOLD[c] ?? c);
+}
+
+// Halk dilindeki terimleri DSM terminolojisine genişlet
+const SYNONYMS: Record<string, string[]> = {
+  depresyon: ['depresif'],
+  kaygi: ['anksiyete'],
+  endise: ['anksiyete'],
+  panik: ['panik'],
+  takinti: ['obsesif'],
+  travma: ['travma', 'stresor'],
+};
+
 export function searchDiagnoses(query: string): DSMDiagnosis[] {
-  const q = query.toLowerCase();
+  const q = foldTurkish(query.trim());
+  if (!q) return [];
+  const terms = [q, ...(SYNONYMS[q] ?? [])];
   const results: DSMDiagnosis[] = [];
   for (const chapter of DSM5_DATA) {
     for (const diag of chapter.diagnoses) {
-      if (
-        diag.name.toLowerCase().includes(q) ||
-        diag.code.toLowerCase().includes(q) ||
-        diag.chapter.toLowerCase().includes(q)
-      ) {
+      const haystack = foldTurkish(`${diag.name} ${diag.code} ${diag.chapter}`);
+      if (terms.some(t => haystack.includes(t))) {
         results.push(diag);
       }
     }
@@ -449,8 +470,9 @@ export function searchDiagnoses(query: string): DSMDiagnosis[] {
 }
 
 export function getDiagnosisByCode(code: string): DSMDiagnosis | undefined {
+  const target = code.trim().toUpperCase();
   for (const chapter of DSM5_DATA) {
-    const found = chapter.diagnoses.find(d => d.code === code);
+    const found = chapter.diagnoses.find(d => d.code.toUpperCase() === target);
     if (found) return found;
   }
   return undefined;

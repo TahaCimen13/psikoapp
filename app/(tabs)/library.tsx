@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import * as DocumentPicker from 'expo-document-picker';
 import { useDatabase } from '@/contexts/database-context';
 import { copyBookToStorage, deleteBook as deleteBookFile, getFileSize, formatFileSize } from '@/lib/storage';
+import { generateId } from '@/lib/id';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 import type { Book } from '@/lib/types';
 
@@ -43,10 +44,12 @@ export default function Library() {
       const file = result.assets[0];
 
       setUploading(true);
+      // Cache URI kalıcı değil — OS temizleyince dosya kaybolur; kalıcı depoya kopyala
+      const storedPath = await copyBookToStorage(file.uri, generateId(), file.name);
       const book = await addBook({
         title: file.name.replace('.pdf', ''),
-        file_path: file.uri,
-        file_size: file.size,
+        file_path: storedPath,
+        file_size: file.size ?? (await getFileSize(storedPath)),
         category: 'Diger',
         current_page: 0,
       });
