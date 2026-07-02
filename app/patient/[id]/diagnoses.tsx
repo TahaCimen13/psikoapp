@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography } from '@/lib/theme';
-import { DSM5_CATEGORIES } from '@/lib/dsm5';
+import { searchDiagnoses } from '@/lib/dsm5';
 import type { Diagnosis } from '@/lib/types';
 
 const SEVERITIES: { value: Diagnosis['severity']; label: string }[] = [
@@ -32,10 +32,7 @@ export default function DiagnosesScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  const allDiagnoses = DSM5_CATEGORIES.flatMap(c => c.diagnoses);
-  const filtered = search.length > 1
-    ? allDiagnoses.filter(d => d.name.toLowerCase().includes(search.toLowerCase()) || d.code.includes(search))
-    : [];
+  const filtered = search.length > 1 ? searchDiagnoses(search) : [];
 
   const selectDiagnosis = (code: string, name: string) => {
     setSelectedCode(code);

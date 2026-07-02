@@ -1,22 +1,34 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { useDatabase } from '@/contexts/database-context';
+import { useAuth } from '@/contexts/auth-context';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 
 export default function Settings() {
   const router = useRouter();
   const { settings, updateSettings } = useDatabase();
+  const { hasPIN, setupPIN, removePIN } = useAuth();
   const [apiKey, setApiKey] = useState('');
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // PIN state
+  const [pinEnabled, setPinEnabled] = useState(hasPIN);
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [showPinForm, setShowPinForm] = useState(false);
 
   useEffect(() => {
     setApiKey(settings.claude_api_key || '');
     setName(settings.psychologist_name || '');
     setTitle(settings.psychologist_title || '');
   }, [settings]);
+
+  useEffect(() => {
+    setPinEnabled(hasPIN);
+  }, [hasPIN]);
 
   const save = async () => {
     setSaving(true);
@@ -28,6 +40,33 @@ export default function Settings() {
     setSaving(false);
     Alert.alert('Kaydedildi', 'Ayarlar başarıyla güncellendi.');
     router.back();
+  };
+
+  const handlePinToggle = async (val: boolean) => {
+    if (val) {
+      setShowPinForm(true);
+    } else {
+      Alert.alert('PIN Kaldır', 'PIN koruması devre dışı bırakılacak.', [
+        { text: 'İptal', style: 'cancel', onPress: () => setPinEnabled(true) },
+        { text: 'Kaldır', style: 'destructive', onPress: async () => { await removePIN(); setPinEnabled(false); setShowPinForm(false); } },
+      ]);
+    }
+  };
+
+  const savePin = async () => {
+    if (newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
+      Alert.alert('Hata', 'PIN 4 haneli rakamdan oluşmalıdır.');
+      return;
+    }
+    if (newPin !== confirmPin) {
+      Alert.alert('Hata', 'PIN\'ler eşleşmiyor.');
+      return;
+    }
+    await setupPIN(newPin);
+    setNewPin('');
+    setConfirmPin('');
+    setShowPinForm(false);
+    Alert.alert('PIN Kuruldu', 'Uygulama bir sonraki açılışta PIN isteyecek.');
   };
 
   return (
@@ -51,10 +90,59 @@ export default function Settings() {
         <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="Klinik Psikolog" placeholderTextColor={colors.placeholder} />
       </View>
 
+      <SectionLabel label="Güvenlik" />
+
+      <View style={styles.toggleRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.toggleLabel}>PIN Kilidi</Text>
+          <Text style={styles.toggleSub}>Uygulama açılışında 4 haneli PIN sor</Text>
+        </View>
+        <Switch
+          value={pinEnabled}
+          onValueChange={handlePinToggle}
+          trackColor={{ false: colors.cardBorder, true: colors.accent }}
+          thumbColor="#fff"
+        />
+      </View>
+
+      {showPinForm && (
+        <View style={styles.pinForm}>
+          <Text style={styles.pinFormTitle}>Yeni PIN Belirle</Text>
+          <TextInput
+            style={styles.pinInput}
+            value={newPin}
+            onChangeText={t => setNewPin(t.replace(/\D/g, '').slice(0, 4))}
+            placeholder="Yeni PIN (4 hane)"
+            placeholderTextColor={colors.placeholder}
+            keyboardType="number-pad"
+            secureTextEntry
+            maxLength={4}
+          />
+          <TextInput
+            style={styles.pinInput}
+            value={confirmPin}
+            onChangeText={t => setConfirmPin(t.replace(/\D/g, '').slice(0, 4))}
+            placeholder="PIN'i Tekrarla"
+            placeholderTextColor={colors.placeholder}
+            keyboardType="number-pad"
+            secureTextEntry
+            maxLength={4}
+          />
+          <View style={styles.pinActions}>
+            <TouchableOpacity onPress={() => { setShowPinForm(false); setPinEnabled(false); setNewPin(''); setConfirmPin(''); }}>
+              <Text style={styles.cancelText}>İptal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.pinSaveBtn} onPress={savePin}>
+              <Text style={styles.pinSaveBtnText}>Kaydet</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <SectionLabel label="AI Asistan" />
 
       <View style={styles.infoBox}>
-        <Text style={styles.infoText}>Claude API anahtarınızı Anthropic Console'dan (console.anthropic.com) alabilirsiniz. Anahtar yalnızca cihazınızda saklanır.</Text>
+        <Text style={styles.infoText}>Claude API anahtarınızı Anthropic Console'dan alabilirsiniz. Anahtar yalnızca cihazınızda saklanır, hiçbir yere gönderilmez.</Text>
       </View>
 
       <View style={styles.field}>
@@ -92,6 +180,16 @@ const styles = StyleSheet.create({
   field: { marginBottom: spacing.sm },
   fieldLabel: { ...typography.small, color: colors.textSecondary, marginBottom: 6 },
   input: { backgroundColor: colors.inputBg, color: colors.text, borderRadius: radius.md, padding: spacing.sm, fontSize: 15, borderWidth: 1, borderColor: colors.cardBorder },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.sm },
+  toggleLabel: { ...typography.body, fontWeight: '600' },
+  toggleSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  pinForm: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.sm, gap: spacing.sm },
+  pinFormTitle: { ...typography.label },
+  pinInput: { backgroundColor: colors.inputBg, color: colors.text, borderRadius: radius.md, padding: spacing.sm, fontSize: 20, borderWidth: 1, borderColor: colors.cardBorder, textAlign: 'center', letterSpacing: 8 },
+  pinActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.lg, marginTop: spacing.xs },
+  cancelText: { color: colors.textSecondary, fontSize: 15 },
+  pinSaveBtn: { backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
+  pinSaveBtnText: { color: '#fff', fontWeight: '700' },
   infoBox: { backgroundColor: colors.accentDim, borderRadius: radius.sm, padding: spacing.sm, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.accent + '44' },
   infoText: { color: colors.accentLight, fontSize: 13, lineHeight: 20 },
   saveBtn: { backgroundColor: colors.accent, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.lg },

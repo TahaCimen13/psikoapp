@@ -21,7 +21,7 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Anasayfa', tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} /> }} />
-      <Tabs.Screen name="patients" options={{ title: 'Hastalar', tabBarIcon: ({ color }) => <TabIcon emoji="👥" color={color} /> }} />
+      <Tabs.Screen name="patients" options={{ title: 'Danışan', tabBarIcon: ({ color }) => <TabIcon emoji="👥" color={color} /> }} />
       <Tabs.Screen name="schedule" options={{ title: 'Takvim', tabBarIcon: ({ color }) => <TabIcon emoji="📅" color={color} /> }} />
       <Tabs.Screen name="library" options={{ title: 'Kütüphane', tabBarIcon: ({ color }) => <TabIcon emoji="📚" color={color} /> }} />
       <Tabs.Screen name="ai-chat" options={{ title: 'AI Asistan', tabBarIcon: ({ color }) => <TabIcon emoji="🤖" color={color} /> }} />

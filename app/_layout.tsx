@@ -6,12 +6,12 @@ import { initDatabase } from '@/lib/database';
 import { DatabaseProvider } from '@/contexts/database-context';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { colors } from '@/lib/theme';
-import LockScreen from './(auth)/index';
+import LockScreen from '@/components/LockScreen';
 
 function AppContent() {
-  const { isLocked } = useAuth();
+  const { isLocked, hasPIN } = useAuth();
 
-  if (isLocked) return <LockScreen />;
+  if (hasPIN && isLocked) return <LockScreen />;
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>

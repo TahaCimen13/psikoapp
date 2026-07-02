@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     checkPIN().then(has => {
       if (has) setIsLocked(true);
+      else setIsLocked(false);
     });
   }, [checkPIN]);
 
