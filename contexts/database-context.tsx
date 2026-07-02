@@ -18,6 +18,7 @@ interface DatabaseContextType {
   // Appointments
   getAppointmentsByPatient: (patientId: string) => Promise<Appointment[]>;
   getUpcomingAppointments: () => Promise<(Appointment & { patient_name: string })[]>;
+  getAppointmentsByRange: (startIso: string, endIso: string) => Promise<(Appointment & { patient_name: string })[]>;
   addAppointment: (data: Omit<Appointment, 'id' | 'created_at' | 'updated_at'>) => Promise<Appointment>;
   updateAppointment: (id: string, data: Partial<Appointment>) => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
@@ -157,18 +158,34 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     return getDb().getAllAsync<Appointment>('SELECT * FROM appointments WHERE patient_id=? ORDER BY date ASC', [patientId]);
   }, []);
 
+  // Randevu tarihleri her zaman UTC ISO (toISOString) olarak saklanır; böylece
+  // string karşılaştırmaları kronolojik sıra ile birebir örtüşür ve lokal saat
+  // dilimi (Türkiye) kaynaklı gün kaymaları oluşmaz.
   const getUpcomingAppointments = useCallback(async (): Promise<(Appointment & { patient_name: string })[]> => {
     const db = getDb();
-    const now_ = new Date().toISOString();
+    // "Yaklaşan" = lokal güne göre bugünün başlangıcından itibaren (UTC ISO'ya çevrilerek karşılaştırılır)
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
     return db.getAllAsync<Appointment & { patient_name: string }>(
       `SELECT a.*, p.name as patient_name FROM appointments a JOIN patients p ON a.patient_id=p.id WHERE a.date >= ? AND a.status='scheduled' ORDER BY a.date ASC LIMIT 50`,
-      [now_]
+      [startOfToday.toISOString()]
+    );
+  }, []);
+
+  const getAppointmentsByRange = useCallback(async (startIso: string, endIso: string): Promise<(Appointment & { patient_name: string })[]> => {
+    return getDb().getAllAsync<Appointment & { patient_name: string }>(
+      `SELECT a.*, p.name as patient_name FROM appointments a JOIN patients p ON a.patient_id=p.id WHERE a.date >= ? AND a.date < ? ORDER BY a.date ASC`,
+      [startIso, endIso]
     );
   }, []);
 
   const addAppointment = useCallback(async (data: Omit<Appointment, 'id' | 'created_at' | 'updated_at'>): Promise<Appointment> => {
     const db = getDb();
-    const a: Appointment = { id: generateId(), created_at: now(), updated_at: now(), ...data };
+    const a: Appointment = {
+      id: generateId(), created_at: now(), updated_at: now(), ...data,
+      // Tarihi tutarlı UTC ISO formatına normalize et
+      date: new Date(data.date).toISOString(),
+    };
     await db.runAsync(
       'INSERT INTO appointments (id, patient_id, date, duration, notes, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)',
       [a.id, a.patient_id, a.date, a.duration, a.notes ?? null, a.status, a.created_at, a.updated_at]
@@ -178,9 +195,10 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
   const updateAppointment = useCallback(async (id: string, data: Partial<Appointment>) => {
     const db = getDb();
+    const normalizedDate = data.date ? new Date(data.date).toISOString() : null;
     await db.runAsync(
       'UPDATE appointments SET status=COALESCE(?,status), notes=COALESCE(?,notes), date=COALESCE(?,date), updated_at=? WHERE id=?',
-      [data.status ?? null, data.notes ?? null, data.date ?? null, now(), id]
+      [data.status ?? null, data.notes ?? null, normalizedDate, now(), id]
     );
   }, []);
 
@@ -194,16 +212,25 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getTodaySessions = useCallback(async (): Promise<(Session & { patient_name: string })[]> => {
-    const today = new Date().toISOString().split('T')[0];
+    // "Bugün" lokal saate göre hesaplanır (UTC split hatası gece 00:00-03:00 arası yanlış gün veriyordu).
+    // Lokal günün başlangıcı/bitişi UTC ISO'ya çevrilerek saklanan ISO tarihlerle tutarlı karşılaştırılır.
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
     return getDb().getAllAsync<Session & { patient_name: string }>(
-      `SELECT s.*, p.name as patient_name FROM sessions s JOIN patients p ON s.patient_id=p.id WHERE date(s.date)=? ORDER BY s.date ASC`,
-      [today]
+      `SELECT s.*, p.name as patient_name FROM sessions s JOIN patients p ON s.patient_id=p.id WHERE s.date >= ? AND s.date < ? ORDER BY s.date ASC`,
+      [start.toISOString(), end.toISOString()]
     );
   }, []);
 
   const addSession = useCallback(async (data: Omit<Session, 'id' | 'created_at' | 'updated_at'>): Promise<Session> => {
     const db = getDb();
-    const s: Session = { id: generateId(), created_at: now(), updated_at: now(), ...data };
+    const s: Session = {
+      id: generateId(), created_at: now(), updated_at: now(), ...data,
+      // Seans tarihi de randevular gibi UTC ISO'ya normalize edilir
+      date: new Date(data.date).toISOString(),
+    };
     await db.runAsync(
       'INSERT INTO sessions (id, patient_id, appointment_id, date, duration, session_number, approach, mood_rating, status, summary, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
       [s.id, s.patient_id, s.appointment_id ?? null, s.date, s.duration ?? null, s.session_number ?? null, s.approach ?? null, s.mood_rating ?? null, s.status, s.summary ?? null, s.created_at, s.updated_at]
@@ -458,7 +485,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   return (
     <DatabaseContext.Provider value={{
       patients, loadPatients, addPatient, updatePatient, deletePatient, getPatient,
-      getAppointmentsByPatient, getUpcomingAppointments, addAppointment, updateAppointment, deleteAppointment,
+      getAppointmentsByPatient, getUpcomingAppointments, getAppointmentsByRange, addAppointment, updateAppointment, deleteAppointment,
       getSessionsByPatient, getTodaySessions, addSession, updateSession, deleteSession, getSession,
       getNotesBySession, addNote, updateNote, deleteNote,
       getDiagnosesByPatient, addDiagnosis, deleteDiagnosis,
