@@ -2,7 +2,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Keyboa
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useDatabase } from '@/contexts/database-context';
-import { sendMessage, generateDifferentialDiagnosis } from '@/lib/claude';
+import { sendMessage } from '@/lib/claude';
 import { generateId } from '@/lib/id';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 import type { ChatMessage, Patient } from '@/lib/types';
@@ -65,40 +65,6 @@ export default function AIChat() {
 
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [input, hasApiKey, loading, addMessage, conversationId, messages, selectedPatient, settings.claude_api_key]);
-
-  // Hasta bağlamı seçiliyken tek dokunuşla ayırıcı tanı değerlendirmesi
-  const runDifferential = useCallback(async () => {
-    if (!selectedPatient || !hasApiKey || loading) return;
-    setLoading(true);
-    setStreamingText('');
-    try {
-      const [diagnoses, sessions] = await Promise.all([
-        getDiagnosesByPatient(selectedPatient.id),
-        getSessionsByPatient(selectedPatient.id),
-      ]);
-      const userMsg = await addMessage({
-        conversation_id: conversationId,
-        patient_id: selectedPatient.id,
-        role: 'user',
-        content: `${selectedPatient.name} için ayırıcı tanı değerlendirmesi hazırla.`,
-      });
-      setMessages(prev => [...prev, userMsg]);
-
-      const reply = await generateDifferentialDiagnosis(settings.claude_api_key!, selectedPatient, diagnoses, sessions);
-      const assistantMsg = await addMessage({
-        conversation_id: conversationId,
-        patient_id: selectedPatient.id,
-        role: 'assistant',
-        content: reply,
-      });
-      setMessages(prev => [...prev, assistantMsg]);
-    } catch (e: any) {
-      Alert.alert('Hata', e.message || 'Ayırıcı tanı değerlendirmesi oluşturulamadı.');
-    } finally {
-      setLoading(false);
-    }
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [selectedPatient, hasApiKey, loading, getDiagnosesByPatient, getSessionsByPatient, addMessage, conversationId, settings.claude_api_key]);
 
   const clearChat = useCallback(() => {
     Alert.alert('Sohbeti Temizle', 'Tüm mesajlar kalıcı olarak silinecek. Emin misiniz?', [
@@ -192,13 +158,6 @@ export default function AIChat() {
         )}
       </ScrollView>
 
-      {selectedPatient && !loading && (
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickAction} onPress={runDifferential}>
-            <Text style={styles.quickActionText}>🧠 Ayırıcı Tanı Değerlendirmesi</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       <View style={styles.inputRow}>
         <TextInput

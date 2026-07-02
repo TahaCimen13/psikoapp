@@ -275,37 +275,6 @@ export async function suggestInterventions(
   return callClaude(apiKey, system, prompt);
 }
 
-// ---- Ayırıcı tanı yardımcısı ----
-
-/**
- * Mevcut tanılar ve seans notu özetlerinden DSM-5-TR kriterleri üzerinden
- * ayırıcı tanı değerlendirmesi üretir. Kesin tanı koymaz; hangi tanıların
- * değerlendirilmesi/dışlanması gerektiğini ve ek bilgi ihtiyaçlarını listeler.
- */
-export async function generateDifferentialDiagnosis(
-  apiKey: string,
-  patient: Patient,
-  diagnoses: Diagnosis[],
-  sessions: Session[]
-): Promise<string> {
-  const system = `${BASE_SYSTEM}\n\nGörevin: Ayırıcı tanı değerlendirmesine yardımcı olmak. DSM-5-TR kriterleri üzerinden:
-(1) Mevcut tanıları destekleyen ve desteklemeyen bulguları özetle
-(2) Değerlendirilmesi gereken alternatif tanıları ve dışlanması gereken durumları (tıbbi nedenler, madde etkisi dahil) belirt
-(3) Her alternatif için ayrım sağlayacak anahtar kriterleri açıkla
-(4) Ayrım için sorulacak soruları ve uygun ölçme araçlarını öner
-UNUTMA: Kesin tanı koyma; nihai klinik karar psikoloğa aittir.`;
-
-  const summaries = sessions
-    .filter(s => s.summary)
-    .slice(0, 6)
-    .map(s => `Seans #${s.session_number ?? '?'}: ${s.summary}`)
-    .join('\n');
-
-  const prompt = `${buildPatientContext(patient, diagnoses)}\n\nSeans Özetleri:\n${summaries || 'Henüz seans özeti yok.'}\n\nBu bilgilere dayanarak yapılandırılmış bir ayırıcı tanı değerlendirmesi hazırla.`;
-
-  return callClaude(apiKey, system, prompt);
-}
-
 // ---- Risk göstergesi tespiti ----
 
 export async function detectRiskIndicators(
