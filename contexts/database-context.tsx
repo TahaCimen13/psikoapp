@@ -59,7 +59,7 @@ interface DatabaseContextType {
 
   // KVKK Consent
   getActiveConsent: (patientId: string) => Promise<KvkkConsent | null>;
-  recordConsent: (patientId: string, version: string) => Promise<KvkkConsent>;
+  recordConsent: (patientId: string, version: string, disclosureVersion: string, deviceInfo: string) => Promise<KvkkConsent>;
   revokeConsent: (patientId: string) => Promise<void>;
 
   // Risk Flags
@@ -381,11 +381,14 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const recordConsent = useCallback(async (patientId: string, version: string): Promise<KvkkConsent> => {
-    const c: KvkkConsent = { id: generateId(), patient_id: patientId, version, consented_at: now() };
+  const recordConsent = useCallback(async (patientId: string, version: string, disclosureVersion: string, deviceInfo: string): Promise<KvkkConsent> => {
+    const c: KvkkConsent = {
+      id: generateId(), patient_id: patientId, version,
+      disclosure_version: disclosureVersion, device_info: deviceInfo, consented_at: now(),
+    };
     await getDb().runAsync(
-      'INSERT INTO kvkk_consents (id, patient_id, version, consented_at) VALUES (?,?,?,?)',
-      [c.id, c.patient_id, c.version, c.consented_at]
+      'INSERT INTO kvkk_consents (id, patient_id, version, disclosure_version, device_info, consented_at) VALUES (?,?,?,?,?,?)',
+      [c.id, c.patient_id, c.version, c.disclosure_version!, c.device_info!, c.consented_at]
     );
     return c;
   }, []);

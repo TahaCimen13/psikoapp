@@ -132,9 +132,11 @@ export interface ChatMessage {
 export interface KvkkConsent {
   id: string;
   patient_id: string;
-  version: string;       // onaylanan rıza metninin versiyonu (örn. "1.0")
+  version: string;             // onaylanan açık rıza metninin versiyonu (örn. "1.0")
+  disclosure_version?: string; // gösterilen aydınlatma metninin versiyonu (2026/347: ayrı metin, ayrı log)
+  device_info?: string;        // rızanın alındığı cihaz (denetim izi)
   consented_at: string;
-  revoked_at?: string;   // geri çekildiyse; kayıt silinmez (denetim izi)
+  revoked_at?: string;         // geri çekildiyse; kayıt silinmez (denetim izi)
 }
 
 export interface AppSettings {

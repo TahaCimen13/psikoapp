@@ -149,6 +149,8 @@ export async function initDatabase(): Promise<void> {
       id TEXT PRIMARY KEY,
       patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
       version TEXT NOT NULL,
+      disclosure_version TEXT,
+      device_info TEXT,
       consented_at TEXT NOT NULL,
       revoked_at TEXT
     );
@@ -195,5 +197,13 @@ async function runMigrations(): Promise<void> {
   } catch {}
   try {
     await db.execAsync('ALTER TABLE sessions ADD COLUMN appointment_id TEXT');
+  } catch {}
+
+  // KVKK 2026/347: aydınlatma metni versiyonu rızadan ayrı loglanır
+  try {
+    await db.execAsync('ALTER TABLE kvkk_consents ADD COLUMN disclosure_version TEXT');
+  } catch {}
+  try {
+    await db.execAsync('ALTER TABLE kvkk_consents ADD COLUMN device_info TEXT');
   } catch {}
 }

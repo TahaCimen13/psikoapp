@@ -4,21 +4,18 @@ import { useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 import { RISK_LEVELS, RISK_CATEGORIES, highestRiskFlag } from '@/components/RiskBadge';
-import ConsentModal from '@/components/ConsentModal';
-import { KVKK_CONSENT_VERSION } from '@/lib/consent';
 import type { Patient, Session, Diagnosis, Homework, RiskFlag, KvkkConsent } from '@/lib/types';
 
 export default function PatientProfile() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getPatient, getSessionsByPatient, getDiagnosesByPatient, getHomeworkByPatient, getRiskFlagsByPatient, deletePatient, getActiveConsent, recordConsent, revokeConsent } = useDatabase();
+  const { getPatient, getSessionsByPatient, getDiagnosesByPatient, getHomeworkByPatient, getRiskFlagsByPatient, deletePatient, getActiveConsent } = useDatabase();
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
   const [riskFlags, setRiskFlags] = useState<RiskFlag[]>([]);
   const [consent, setConsent] = useState<KvkkConsent | null>(null);
-  const [showConsent, setShowConsent] = useState(false);
   const [pendingHw, setPendingHw] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -117,7 +114,7 @@ export default function PatientProfile() {
 
           <TouchableOpacity
             style={[styles.consentRow, consent ? styles.consentOk : styles.consentMissing]}
-            onPress={() => setShowConsent(true)}
+            onPress={() => router.push(`/patient/${id}/consent`)}
           >
             <Text style={[styles.consentText, { color: consent ? colors.success : colors.warning }]}>
               {consent ? `🛡 KVKK Rızası ✓ v${consent.version}` : '⚠️ KVKK rızası alınmamış'}
@@ -170,15 +167,6 @@ export default function PatientProfile() {
           )}
         </View>
       </ScrollView>
-
-      <ConsentModal
-        visible={showConsent}
-        patientName={patient.name}
-        consent={consent}
-        onClose={() => setShowConsent(false)}
-        onConsent={async () => { await recordConsent(id, KVKK_CONSENT_VERSION); await load(); }}
-        onRevoke={async () => { await revokeConsent(id); await load(); }}
-      />
     </View>
   );
 }
