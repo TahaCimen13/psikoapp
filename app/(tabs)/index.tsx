@@ -4,7 +4,11 @@ import { useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 import { RISK_LEVELS, RISK_CATEGORIES, RISK_LEVEL_ORDER } from '@/components/RiskBadge';
+import { Icon } from '@/components/ui/Icon';
 import type { Session, RiskFlag } from '@/lib/types';
+import type { ComponentProps } from 'react';
+
+type IconName = ComponentProps<typeof Icon>['name'];
 
 interface TodaySession extends Session {
   patient_name: string;
@@ -53,19 +57,22 @@ export default function Dashboard() {
     >
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>{greeting()}</Text>
-          <Text style={styles.name}>{settings.psychologist_name || 'Uzman'}</Text>
+          <Text style={styles.greeting}>{greeting()},</Text>
+          <Text style={styles.name}>
+            {settings.psychologist_name
+              ? settings.psychologist_name.split(' ')[0]
+              : 'Hoş geldiniz'}
+          </Text>
         </View>
         <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
-          <Text style={{ fontSize: 22 }}>⚙️</Text>
+          <Icon name="settings-outline" size={22} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.statsRow}>
-        <StatCard label="Toplam Hasta" value={stats.totalPatients} emoji="👥" />
-        <StatCard label="Bu Ay Seans" value={stats.monthSessions} emoji="📅" />
-        <StatCard label="Aktif Tanı" value={stats.activeDiagnoses} emoji="📋" />
-        {stats.activeRisks > 0 && <StatCard label="Risk" value={stats.activeRisks} emoji="⚠️" alert />}
+        <StatCard label="Danışan" value={stats.totalPatients} iconName="people-outline" />
+        <StatCard label="Bu Ay Seans" value={stats.monthSessions} iconName="calendar-outline" />
+        {stats.activeRisks > 0 && <StatCard label="Risk" value={stats.activeRisks} iconName="warning-outline" alert />}
       </View>
 
       {activeRisks.length > 0 && (
@@ -95,7 +102,11 @@ export default function Dashboard() {
 
       <SectionHeader title="Bugünün Seansları" />
       {todaySessions.length === 0 ? (
-        <EmptyCard message="Bugün için planlanmış seans yok" />
+        <EmptyCard
+          message="Bugün için randevu yok"
+          ctaLabel="Randevu Ekle →"
+          onCtaPress={() => router.push('/(tabs)/schedule')}
+        />
       ) : (
         todaySessions.map(session => (
           <TouchableOpacity
@@ -115,9 +126,13 @@ export default function Dashboard() {
         ))
       )}
 
-      <SectionHeader title="Son Hastalar" />
+      <SectionHeader title="Danışanlarım" />
       {patients.length === 0 ? (
-        <EmptyCard message="Henüz hasta eklenmemiş" />
+        <EmptyCard
+          message="Henüz danışan eklenmemiş"
+          ctaLabel="İlk Danışanı Ekle →"
+          onCtaPress={() => router.push('/patient/new')}
+        />
       ) : (
         patients.slice(0, 4).map(patient => (
           <TouchableOpacity
@@ -140,16 +155,16 @@ export default function Dashboard() {
       )}
 
       <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/patient/new')}>
-        <Text style={styles.addBtnText}>+ Yeni Hasta Ekle</Text>
+        <Text style={styles.addBtnText}>+ Yeni Danışan</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
-function StatCard({ label, value, emoji, alert }: { label: string; value: number; emoji: string; alert?: boolean }) {
+function StatCard({ label, value, iconName, alert }: { label: string; value: number; iconName: IconName; alert?: boolean }) {
   return (
     <View style={[styles.statCard, alert && { borderColor: colors.error + '60' }]}>
-      <Text style={{ fontSize: 24 }}>{emoji}</Text>
+      <Icon name={iconName} size={18} color={alert ? colors.error : colors.accent} />
       <Text style={[styles.statValue, alert && { color: colors.error }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -160,10 +175,15 @@ function SectionHeader({ title }: { title: string }) {
   return <Text style={styles.sectionHeader}>{title}</Text>;
 }
 
-function EmptyCard({ message }: { message: string }) {
+function EmptyCard({ message, ctaLabel, onCtaPress }: { message: string; ctaLabel?: string; onCtaPress?: () => void }) {
   return (
     <View style={styles.emptyCard}>
       <Text style={styles.emptyText}>{message}</Text>
+      {ctaLabel && onCtaPress && (
+        <TouchableOpacity style={styles.emptyAction} onPress={onCtaPress}>
+          <Text style={styles.emptyActionText}>{ctaLabel}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -207,6 +227,8 @@ const styles = StyleSheet.create({
   arrow: { color: colors.textMuted, fontSize: 20 },
   emptyCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.sm },
   emptyText: { color: colors.textMuted, fontSize: 14 },
+  emptyAction: { marginTop: 12 },
+  emptyActionText: { color: colors.accent, fontWeight: '600', fontSize: 14 },
   riskCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm, borderWidth: 1 },
   riskDot: { width: 10, height: 10, borderRadius: 5 },
   moreRiskText: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginBottom: spacing.sm },

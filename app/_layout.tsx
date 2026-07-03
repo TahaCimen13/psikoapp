@@ -7,6 +7,7 @@ import { DatabaseProvider } from '@/contexts/database-context';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { colors } from '@/lib/theme';
 import LockScreen from '@/components/LockScreen';
+import { Icon } from '@/components/ui/Icon';
 
 function AppContent() {
   const { isLocked, hasPIN } = useAuth();
@@ -46,7 +47,9 @@ export default function RootLayout() {
   if (initError) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-        <Text style={{ fontSize: 40, marginBottom: 12 }}>⚠️</Text>
+        <View style={{ marginBottom: 12 }}>
+          <Icon name="warning-outline" size={48} color={colors.warning} />
+        </View>
         <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', marginBottom: 8 }}>Uygulama başlatılamadı</Text>
         <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 20 }}>{initError}</Text>
         <TouchableOpacity

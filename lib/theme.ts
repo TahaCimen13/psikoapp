@@ -1,19 +1,30 @@
 export const colors = {
-  background: '#f5f6fa',
-  card: '#ffffff',
-  cardBorder: '#e2e8f0',
-  accent: '#7c3aed',
-  accentLight: '#6d28d9',
-  accentDim: '#ede9fe',
-  text: '#1e293b',
+  // Sayfa arka planı
+  background: '#F8FAFC',
+
+  // Kartlar ve surface'ler
+  card: '#FFFFFF',
+  cardBorder: '#E2E8F0',
+
+  // Primary — soft indigo (agresif mor yerine muted ton)
+  accent: '#5B5BD6',
+  accentLight: '#4F46E5',
+  accentDim: '#EEF2FF',
+
+  // Text hierarchy
+  text: '#0F172A',
   textSecondary: '#475569',
-  textMuted: '#94a3b8',
+  textMuted: '#94A3B8',
+
+  // Semantic
   success: '#059669',
-  warning: '#d97706',
-  error: '#dc2626',
-  divider: '#f1f5f9',
-  inputBg: '#f8fafc',
-  placeholder: '#94a3b8',
+  warning: '#D97706',
+  error: '#DC2626',
+
+  // Input
+  divider: '#F1F5F9',
+  inputBg: '#F8FAFC',
+  placeholder: '#CBD5E1',
 };
 
 export const spacing = {

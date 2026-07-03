@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 import { RISK_LEVELS, RISK_CATEGORIES, highestRiskFlag } from '@/components/RiskBadge';
+import { Icon } from '@/components/ui/Icon';
 import type { Patient, Session, Diagnosis, Homework, RiskFlag, KvkkConsent } from '@/lib/types';
 
 export default function PatientProfile() {
@@ -46,7 +47,7 @@ export default function PatientProfile() {
   }, [load]);
 
   const confirmDelete = () => {
-    Alert.alert('Hastayı Sil', 'Bu hasta ve tüm verileri kalıcı olarak silinecek.', [
+    Alert.alert('Danışanı Sil', 'Bu danışan ve tüm verileri kalıcı olarak silinecek.', [
       { text: 'İptal', style: 'cancel' },
       { text: 'Sil', style: 'destructive', onPress: async () => { await deletePatient(id); router.back(); } },
     ]);
@@ -74,11 +75,12 @@ export default function PatientProfile() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>← Geri</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
+          <Icon name="chevron-back" size={22} color={colors.accent} />
+          <Text style={styles.back}>Geri</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={confirmDelete}>
-          <Text style={styles.deleteBtn}>🗑</Text>
+        <TouchableOpacity onPress={confirmDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Icon name="trash-outline" size={20} color={colors.error} />
         </TouchableOpacity>
       </View>
 
@@ -89,8 +91,9 @@ export default function PatientProfile() {
             style={[styles.riskBand, { backgroundColor: RISK_LEVELS[topRisk.level].color }]}
             onPress={() => router.push(`/patient/${id}/risk`)}
           >
+            <Icon name="warning" color="white" size={14} />
             <Text style={styles.riskBandText}>
-              ⚠️ Aktif Risk: {RISK_LEVELS[topRisk.level].label} — {RISK_CATEGORIES[topRisk.category]}
+              Aktif Risk: {RISK_LEVELS[topRisk.level].label} — {RISK_CATEGORIES[topRisk.category]}
             </Text>
             <Text style={styles.riskBandArrow}>›</Text>
           </TouchableOpacity>
@@ -202,8 +205,8 @@ function StatusBadge({ status }: { status: string }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: spacing.xl + spacing.md },
+  backRow: { flexDirection: 'row', alignItems: 'center' },
   back: { color: colors.accent, fontSize: 15, fontWeight: '600' },
-  deleteBtn: { fontSize: 20 },
   profileCard: { marginHorizontal: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.md },
   avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: colors.accentDim, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.sm },
   avatarText: { color: colors.accentLight, fontSize: 32, fontWeight: '700' },
@@ -236,7 +239,7 @@ const styles = StyleSheet.create({
   consentOk: { backgroundColor: colors.success + '15', borderColor: colors.success + '50' },
   consentMissing: { backgroundColor: colors.warning + '15', borderColor: colors.warning + '50' },
   consentText: { fontSize: 12, fontWeight: '600' },
-  riskBand: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: spacing.md, marginBottom: spacing.md, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  riskBand: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, justifyContent: 'space-between', marginHorizontal: spacing.md, marginBottom: spacing.md, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   riskBandText: { color: '#fff', fontWeight: '700', fontSize: 13, flex: 1 },
   riskBandArrow: { color: '#fff', fontSize: 18, fontWeight: '700', marginLeft: spacing.sm },
 });
