@@ -91,6 +91,16 @@ export default function Settings() {
         <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="Klinik Psikolog" placeholderTextColor={colors.placeholder} />
       </View>
 
+      <SectionLabel label="Klinik Araçlar" />
+
+      <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/anamnesis')}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.toggleLabel}>📋 Anamnez Formları</Text>
+          <Text style={styles.toggleSub}>Danışan öykü formlarını oluştur ve düzenle</Text>
+        </View>
+        <Text style={styles.linkArrow}>›</Text>
+      </TouchableOpacity>
+
       <SectionLabel label="Güvenlik" />
 
       <View style={styles.toggleRow}>
@@ -210,6 +220,8 @@ const styles = StyleSheet.create({
   fieldLabel: { ...typography.small, color: colors.textSecondary, marginBottom: 6 },
   input: { backgroundColor: colors.inputBg, color: colors.text, borderRadius: radius.md, padding: spacing.sm, fontSize: 15, borderWidth: 1, borderColor: colors.cardBorder },
   toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.sm },
+  linkRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.sm },
+  linkArrow: { color: colors.textMuted, fontSize: 20, fontWeight: '600' },
   toggleLabel: { ...typography.body, fontWeight: '600' },
   toggleSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   autoLockRow: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.sm },

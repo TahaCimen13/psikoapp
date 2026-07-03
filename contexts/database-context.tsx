@@ -4,7 +4,9 @@ import { generateId, now } from '@/lib/id';
 import type {
   Patient, Appointment, Session, SessionNote, Diagnosis, Assessment,
   Homework, TreatmentPlan, RiskFlag, Book, BookAnnotation, ChatMessage, AppSettings, KvkkConsent,
+  AnamnesisForm, AnamnesisResponse,
 } from '@/lib/types';
+import type { AnamnesisQuestion, AnamnesisAnswers } from '@/lib/anamnesis';
 
 interface DatabaseContextType {
   // Patients
@@ -61,6 +63,17 @@ interface DatabaseContextType {
   getActiveConsent: (patientId: string) => Promise<KvkkConsent | null>;
   recordConsent: (patientId: string, version: string, disclosureVersion: string, deviceInfo: string) => Promise<KvkkConsent>;
   revokeConsent: (patientId: string) => Promise<void>;
+
+  // Anamnesis
+  getAnamnesisForms: () => Promise<AnamnesisForm[]>;
+  getAnamnesisForm: (id: string) => Promise<AnamnesisForm | null>;
+  addAnamnesisForm: (name: string, questions: AnamnesisQuestion[]) => Promise<AnamnesisForm>;
+  updateAnamnesisForm: (id: string, name: string, questions: AnamnesisQuestion[]) => Promise<void>;
+  deleteAnamnesisForm: (id: string) => Promise<void>;
+  getAnamnesisResponsesByPatient: (patientId: string) => Promise<AnamnesisResponse[]>;
+  getAnamnesisResponse: (id: string) => Promise<AnamnesisResponse | null>;
+  addAnamnesisResponse: (patientId: string, form: AnamnesisForm, answers: AnamnesisAnswers) => Promise<AnamnesisResponse>;
+  deleteAnamnesisResponse: (id: string) => Promise<void>;
 
   // Risk Flags
   getRiskFlagsByPatient: (patientId: string) => Promise<RiskFlag[]>;
@@ -400,6 +413,75 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
+  // --- Anamnesis ---
+  // Sorular DB'de JSON saklanır; yanıtlar doldurma anındaki soru snapshot'ını
+  // taşır, böylece form değişse/silinse de eski yanıtlar okunabilir kalır.
+  type AnamnesisFormRow = Omit<AnamnesisForm, 'questions'> & { questions: string };
+  type AnamnesisResponseRow = Omit<AnamnesisResponse, 'questions' | 'answers'> & { questions: string; answers: string };
+  const parseForm = (r: AnamnesisFormRow): AnamnesisForm => ({ ...r, questions: JSON.parse(r.questions) });
+  const parseResponse = (r: AnamnesisResponseRow): AnamnesisResponse => ({ ...r, questions: JSON.parse(r.questions), answers: JSON.parse(r.answers) });
+
+  const getAnamnesisForms = useCallback(async (): Promise<AnamnesisForm[]> => {
+    const rows = await getDb().getAllAsync<AnamnesisFormRow>('SELECT * FROM anamnesis_forms ORDER BY created_at ASC');
+    return rows.map(parseForm);
+  }, []);
+
+  const getAnamnesisForm = useCallback(async (id: string): Promise<AnamnesisForm | null> => {
+    const row = await getDb().getFirstAsync<AnamnesisFormRow>('SELECT * FROM anamnesis_forms WHERE id=?', [id]);
+    return row ? parseForm(row) : null;
+  }, []);
+
+  const addAnamnesisForm = useCallback(async (name: string, questions: AnamnesisQuestion[]): Promise<AnamnesisForm> => {
+    const f: AnamnesisForm = { id: generateId(), name, version: 1, questions, created_at: now(), updated_at: now() };
+    await getDb().runAsync(
+      'INSERT INTO anamnesis_forms (id, name, version, questions, created_at, updated_at) VALUES (?,?,?,?,?,?)',
+      [f.id, f.name, f.version, JSON.stringify(f.questions), f.created_at, f.updated_at]
+    );
+    return f;
+  }, []);
+
+  const updateAnamnesisForm = useCallback(async (id: string, name: string, questions: AnamnesisQuestion[]) => {
+    const row = await getDb().getFirstAsync<AnamnesisFormRow>('SELECT * FROM anamnesis_forms WHERE id=?', [id]);
+    if (!row) return;
+    // Sorular değiştiyse versiyon artar (hangi versiyonun doldurulduğu izlenebilsin)
+    const changed = JSON.stringify(questions) !== row.questions;
+    await getDb().runAsync(
+      'UPDATE anamnesis_forms SET name=?, version=?, questions=?, updated_at=? WHERE id=?',
+      [name, changed ? row.version + 1 : row.version, JSON.stringify(questions), now(), id]
+    );
+  }, []);
+
+  const deleteAnamnesisForm = useCallback(async (id: string) => {
+    // Yanıtlar form_id=NULL ile korunur (ON DELETE SET NULL), sağlık kaydı silinmez
+    await getDb().runAsync('DELETE FROM anamnesis_forms WHERE id=?', [id]);
+  }, []);
+
+  const getAnamnesisResponsesByPatient = useCallback(async (patientId: string): Promise<AnamnesisResponse[]> => {
+    const rows = await getDb().getAllAsync<AnamnesisResponseRow>('SELECT * FROM anamnesis_responses WHERE patient_id=? ORDER BY filled_at DESC', [patientId]);
+    return rows.map(parseResponse);
+  }, []);
+
+  const getAnamnesisResponse = useCallback(async (id: string): Promise<AnamnesisResponse | null> => {
+    const row = await getDb().getFirstAsync<AnamnesisResponseRow>('SELECT * FROM anamnesis_responses WHERE id=?', [id]);
+    return row ? parseResponse(row) : null;
+  }, []);
+
+  const addAnamnesisResponse = useCallback(async (patientId: string, form: AnamnesisForm, answers: AnamnesisAnswers): Promise<AnamnesisResponse> => {
+    const r: AnamnesisResponse = {
+      id: generateId(), patient_id: patientId, form_id: form.id, form_name: form.name,
+      form_version: form.version, questions: form.questions, answers, filled_at: now(),
+    };
+    await getDb().runAsync(
+      'INSERT INTO anamnesis_responses (id, patient_id, form_id, form_name, form_version, questions, answers, filled_at) VALUES (?,?,?,?,?,?,?,?)',
+      [r.id, r.patient_id, r.form_id!, r.form_name, r.form_version, JSON.stringify(r.questions), JSON.stringify(r.answers), r.filled_at]
+    );
+    return r;
+  }, []);
+
+  const deleteAnamnesisResponse = useCallback(async (id: string) => {
+    await getDb().runAsync('DELETE FROM anamnesis_responses WHERE id=?', [id]);
+  }, []);
+
   // --- Risk Flags ---
   const getRiskFlagsByPatient = useCallback(async (patientId: string): Promise<RiskFlag[]> => {
     type RiskRow = Omit<RiskFlag, 'resolved'> & { resolved: number };
@@ -527,6 +609,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       getHomeworkByPatient, addHomework, updateHomework, deleteHomework,
       getTreatmentPlan, saveTreatmentPlan,
       getActiveConsent, recordConsent, revokeConsent,
+      getAnamnesisForms, getAnamnesisForm, addAnamnesisForm, updateAnamnesisForm, deleteAnamnesisForm,
+      getAnamnesisResponsesByPatient, getAnamnesisResponse, addAnamnesisResponse, deleteAnamnesisResponse,
       getRiskFlagsByPatient, addRiskFlag, resolveRiskFlag, getActiveRiskFlags,
       books, loadBooks, addBook, updateBookPage, deleteBook,
       getAnnotationsByBook, addAnnotation, deleteAnnotation,

@@ -1,4 +1,6 @@
 import * as SQLite from 'expo-sqlite';
+import { generateId, now } from './id';
+import { DEFAULT_FORM_NAME, DEFAULT_TEMPLATE } from './anamnesis';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -155,6 +157,26 @@ export async function initDatabase(): Promise<void> {
       revoked_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS anamnesis_forms (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      questions TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS anamnesis_responses (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+      form_id TEXT REFERENCES anamnesis_forms(id) ON DELETE SET NULL,
+      form_name TEXT NOT NULL,
+      form_version INTEGER NOT NULL,
+      questions TEXT NOT NULL,
+      answers TEXT NOT NULL,
+      filled_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
       value TEXT
@@ -162,6 +184,19 @@ export async function initDatabase(): Promise<void> {
   `);
 
   await runMigrations();
+  await seedDefaultAnamnesisForm();
+}
+
+// Psikolog sıfırdan başlamasın: hiç form yoksa standart şablonu yükle
+async function seedDefaultAnamnesisForm(): Promise<void> {
+  if (!db) return;
+  const row = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM anamnesis_forms');
+  if (row && row.c > 0) return;
+  const ts = now();
+  await db.runAsync(
+    'INSERT INTO anamnesis_forms (id, name, version, questions, created_at, updated_at) VALUES (?,?,?,?,?,?)',
+    [generateId(), DEFAULT_FORM_NAME, 1, JSON.stringify(DEFAULT_TEMPLATE), ts, ts]
+  );
 }
 
 // PIN unutulduğunda kullanılır: kilidin amacı veri koruması olduğundan
@@ -169,6 +204,9 @@ export async function initDatabase(): Promise<void> {
 export async function wipeAllData(): Promise<void> {
   if (!db) return;
   await db.execAsync(`
+    DELETE FROM anamnesis_responses;
+    DELETE FROM anamnesis_forms;
+    DELETE FROM kvkk_consents;
     DELETE FROM chat_messages;
     DELETE FROM book_annotations;
     DELETE FROM books;

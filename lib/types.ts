@@ -1,3 +1,5 @@
+import type { AnamnesisQuestion, AnamnesisAnswers } from './anamnesis';
+
 export interface Patient {
   id: string;
   name: string;
@@ -137,6 +139,26 @@ export interface KvkkConsent {
   device_info?: string;        // rızanın alındığı cihaz (denetim izi)
   consented_at: string;
   revoked_at?: string;         // geri çekildiyse; kayıt silinmez (denetim izi)
+}
+
+export interface AnamnesisForm {
+  id: string;
+  name: string;
+  version: number;              // sorular her değiştiğinde +1
+  questions: AnamnesisQuestion[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnamnesisResponse {
+  id: string;
+  patient_id: string;
+  form_id?: string;             // form silinirse null kalır, yanıt yaşamaya devam eder
+  form_name: string;
+  form_version: number;
+  questions: AnamnesisQuestion[]; // doldurma anındaki soruların snapshot'ı
+  answers: AnamnesisAnswers;
+  filled_at: string;
 }
 
 export interface AppSettings {
