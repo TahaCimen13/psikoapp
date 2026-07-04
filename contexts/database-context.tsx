@@ -24,6 +24,7 @@ interface DatabaseContextType {
   addAppointment: (data: Omit<Appointment, 'id' | 'created_at' | 'updated_at'>) => Promise<Appointment>;
   updateAppointment: (id: string, data: Partial<Appointment>) => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
+  deleteAppointmentSeries: (recurrenceId: string, fromDateIso: string) => Promise<string[]>;
 
   // Sessions
   getSessionsByPatient: (patientId: string) => Promise<Session[]>;
@@ -208,10 +209,22 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       date: new Date(data.date).toISOString(),
     };
     await db.runAsync(
-      'INSERT INTO appointments (id, patient_id, date, duration, notes, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)',
-      [a.id, a.patient_id, a.date, a.duration, a.notes ?? null, a.status, a.created_at, a.updated_at]
+      'INSERT INTO appointments (id, patient_id, date, duration, notes, status, recurrence_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+      [a.id, a.patient_id, a.date, a.duration, a.notes ?? null, a.status, a.recurrence_id ?? null, a.created_at, a.updated_at]
     );
     return a;
+  }, []);
+
+  // Tekrarlayan seride "bu ve sonrakiler"i sil; silinen id'ler döner
+  // (çağıran taraf bildirimleri iptal edebilsin diye)
+  const deleteAppointmentSeries = useCallback(async (recurrenceId: string, fromDateIso: string): Promise<string[]> => {
+    const db = getDb();
+    const rows = await db.getAllAsync<{ id: string }>(
+      'SELECT id FROM appointments WHERE recurrence_id=? AND date>=?',
+      [recurrenceId, fromDateIso]
+    );
+    await db.runAsync('DELETE FROM appointments WHERE recurrence_id=? AND date>=?', [recurrenceId, fromDateIso]);
+    return rows.map(r => r.id);
   }, []);
 
   const updateAppointment = useCallback(async (id: string, data: Partial<Appointment>) => {
@@ -644,7 +657,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   return (
     <DatabaseContext.Provider value={{
       patients, loadPatients, addPatient, updatePatient, deletePatient, getPatient,
-      getAppointmentsByPatient, getUpcomingAppointments, getAppointmentsByRange, addAppointment, updateAppointment, deleteAppointment,
+      getAppointmentsByPatient, getUpcomingAppointments, getAppointmentsByRange, addAppointment, updateAppointment, deleteAppointment, deleteAppointmentSeries,
       getSessionsByPatient, getTodaySessions, addSession, updateSession, deleteSession, getSession,
       getNotesBySession, addNote, updateNote, deleteNote, getNoteVersionsBySession,
       getDiagnosesByPatient, addDiagnosis, updateDiagnosis, deleteDiagnosis,

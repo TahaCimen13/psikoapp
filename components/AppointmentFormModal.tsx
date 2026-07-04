@@ -7,11 +7,15 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { colors, spacing, radius, typography } from '@/lib/theme';
 import type { Patient } from '@/lib/types';
 
+export type RecurrenceType = 'yok' | 'haftalik' | 'iki_haftalik';
+
 export interface AppointmentFormData {
   patient_id: string;
   date: Date;
   duration: number;
   notes?: string;
+  recurrence: RecurrenceType;
+  occurrences: number;   // seri uzunluğu (ilk randevu dahil); recurrence 'yok' ise 1
 }
 
 interface Props {
@@ -22,6 +26,12 @@ interface Props {
 }
 
 const DURATIONS = [30, 45, 50, 60, 90];
+const RECURRENCES: { value: RecurrenceType; label: string }[] = [
+  { value: 'yok', label: 'Tek seferlik' },
+  { value: 'haftalik', label: 'Her hafta' },
+  { value: 'iki_haftalik', label: '2 haftada bir' },
+];
+const OCCURRENCE_OPTIONS = [4, 8, 12, 24];
 
 function defaultDate(): Date {
   const d = new Date();
@@ -35,6 +45,8 @@ export default function AppointmentFormModal({ visible, patients, onClose, onSav
   const [date, setDate] = useState<Date>(defaultDate);
   const [duration, setDuration] = useState(50);
   const [notes, setNotes] = useState('');
+  const [recurrence, setRecurrence] = useState<RecurrenceType>('yok');
+  const [occurrences, setOccurrences] = useState(8);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -45,6 +57,8 @@ export default function AppointmentFormModal({ visible, patients, onClose, onSav
       setDate(defaultDate());
       setDuration(50);
       setNotes('');
+      setRecurrence('yok');
+      setOccurrences(8);
       setShowDatePicker(false);
       setShowTimePicker(false);
       setSaving(false);
@@ -77,7 +91,10 @@ export default function AppointmentFormModal({ visible, patients, onClose, onSav
     if (!patientId || saving) return;
     setSaving(true);
     try {
-      await onSave({ patient_id: patientId, date, duration, notes: notes.trim() || undefined });
+      await onSave({
+        patient_id: patientId, date, duration, notes: notes.trim() || undefined,
+        recurrence, occurrences: recurrence === 'yok' ? 1 : occurrences,
+      });
     } finally {
       setSaving(false);
     }
@@ -171,6 +188,39 @@ export default function AppointmentFormModal({ visible, patients, onClose, onSav
               ))}
             </View>
 
+            <Text style={styles.fieldLabel}>Tekrar</Text>
+            <View style={styles.chipWrap}>
+              {RECURRENCES.map(r => (
+                <TouchableOpacity
+                  key={r.value}
+                  style={[styles.chip, recurrence === r.value && styles.chipActive]}
+                  onPress={() => setRecurrence(r.value)}
+                >
+                  <Text style={[styles.chipText, recurrence === r.value && styles.chipTextActive]}>{r.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {recurrence !== 'yok' && (
+              <>
+                <Text style={styles.fieldLabel}>Kaç seans?</Text>
+                <View style={styles.chipWrap}>
+                  {OCCURRENCE_OPTIONS.map(n => (
+                    <TouchableOpacity
+                      key={n}
+                      style={[styles.chip, occurrences === n && styles.chipActive]}
+                      onPress={() => setOccurrences(n)}
+                    >
+                      <Text style={[styles.chipText, occurrences === n && styles.chipTextActive]}>{n}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.recurrenceHint}>
+                  {occurrences} randevu oluşturulur: {date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })} tarihinden itibaren {recurrence === 'haftalik' ? 'her hafta' : 'iki haftada bir'} aynı gün ve saatte.
+                </Text>
+              </>
+            )}
+
             <Text style={styles.fieldLabel}>Not (isteğe bağlı)</Text>
             <TextInput
               style={styles.notesInput}
@@ -186,7 +236,9 @@ export default function AppointmentFormModal({ visible, patients, onClose, onSav
               onPress={handleSave}
               disabled={!patientId || saving}
             >
-              <Text style={styles.saveBtnText}>{saving ? 'Kaydediliyor...' : 'Randevuyu Kaydet'}</Text>
+              <Text style={styles.saveBtnText}>
+                {saving ? 'Kaydediliyor...' : recurrence === 'yok' ? 'Randevuyu Kaydet' : `${occurrences} Randevuyu Kaydet`}
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -215,6 +267,7 @@ const styles = StyleSheet.create({
   pickerBtnActive: { borderColor: colors.accent },
   pickerBtnText: { color: colors.text, fontSize: 14, fontWeight: '500' },
   notesInput: { backgroundColor: colors.inputBg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.cardBorder, padding: spacing.sm, color: colors.text, fontSize: 15, minHeight: 72, textAlignVertical: 'top' },
+  recurrenceHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: spacing.sm },
   saveBtn: { backgroundColor: colors.accent, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },

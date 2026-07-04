@@ -35,6 +35,7 @@ export async function initDatabase(): Promise<void> {
       duration INTEGER NOT NULL DEFAULT 50,
       notes TEXT,
       status TEXT NOT NULL DEFAULT 'scheduled',
+      recurrence_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -258,6 +259,11 @@ async function runMigrations(): Promise<void> {
   // tamamlanmış test PDF'inde seçimlerin işaretlenebilmesi için saklanır
   try {
     await db.execAsync('ALTER TABLE assessments ADD COLUMN answers TEXT');
+  } catch {}
+
+  // Tekrarlayan randevu serileri
+  try {
+    await db.execAsync('ALTER TABLE appointments ADD COLUMN recurrence_id TEXT');
   } catch {}
 
   // KVKK 2026/347: aydınlatma metni versiyonu rızadan ayrı loglanır

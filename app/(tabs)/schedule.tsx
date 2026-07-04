@@ -5,6 +5,7 @@ import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import AppointmentFormModal, { AppointmentFormData } from '@/components/AppointmentFormModal';
 import { scheduleAppointmentReminder, cancelAppointmentReminder } from '@/lib/notifications';
+import { generateId } from '@/lib/id';
 import type { Appointment } from '@/lib/types';
 
 type UpcomingAppointment = Appointment & { patient_name: string };
@@ -18,7 +19,7 @@ function localDateKey(dateStr: string): string {
 }
 
 export default function Schedule() {
-  const { getUpcomingAppointments, getActiveRiskFlags, addAppointment, updateAppointment, deleteAppointment, patients } = useDatabase();
+  const { getUpcomingAppointments, getActiveRiskFlags, addAppointment, updateAppointment, deleteAppointment, deleteAppointmentSeries, patients } = useDatabase();
   const router = useRouter();
   const [appointments, setAppointments] = useState<UpcomingAppointment[]>([]);
   const [riskCount, setRiskCount] = useState(0);
@@ -41,15 +42,24 @@ export default function Schedule() {
   }, [load]);
 
   const saveAppointment = useCallback(async (data: AppointmentFormData) => {
-    const appt = await addAppointment({
-      patient_id: data.patient_id,
-      date: data.date.toISOString(),
-      duration: data.duration,
-      notes: data.notes,
-      status: 'scheduled',
-    });
     const patientName = patients.find(p => p.id === data.patient_id)?.name ?? 'Danışan';
-    await scheduleAppointmentReminder(appt, patientName);
+    // Tekrarlayan seri: aynı gün+saat, haftalık veya 2 haftalık aralıkla;
+    // tüm randevular ortak recurrence_id taşır, her biri kendi hatırlatmasını alır
+    const recurrenceId = data.occurrences > 1 ? generateId() : undefined;
+    const stepDays = data.recurrence === 'iki_haftalik' ? 14 : 7;
+    for (let i = 0; i < data.occurrences; i++) {
+      const d = new Date(data.date);
+      d.setDate(d.getDate() + i * stepDays);
+      const appt = await addAppointment({
+        patient_id: data.patient_id,
+        date: d.toISOString(),
+        duration: data.duration,
+        notes: data.notes,
+        status: 'scheduled',
+        recurrence_id: recurrenceId,
+      });
+      await scheduleAppointmentReminder(appt, patientName);
+    }
     setAdding(false);
     await load();
   }, [addAppointment, patients, load]);
@@ -81,19 +91,30 @@ export default function Schedule() {
               },
             },
             {
-              text: 'Kalıcı olarak sil', style: 'destructive', onPress: async () => {
+              text: a.recurrence_id ? 'Sadece bu randevuyu sil' : 'Kalıcı olarak sil',
+              style: 'destructive', onPress: async () => {
                 await deleteAppointment(a.id);
                 await cancelAppointmentReminder(a.id);
                 await load();
               },
             },
+            // Tekrarlayan seride: bu tarihten itibaren tüm seriyi kaldır
+            ...(a.recurrence_id ? [{
+              text: 'Bu ve sonraki tekrarları sil',
+              style: 'destructive' as const,
+              onPress: async () => {
+                const deletedIds = await deleteAppointmentSeries(a.recurrence_id!, a.date);
+                await Promise.all(deletedIds.map(id => cancelAppointmentReminder(id)));
+                await load();
+              },
+            }] : []),
             { text: 'Vazgeç', style: 'cancel' },
           ]);
         },
       },
       { text: 'Vazgeç', style: 'cancel' },
     ]);
-  }, [updateAppointment, deleteAppointment, load]);
+  }, [updateAppointment, deleteAppointment, deleteAppointmentSeries, load]);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -162,7 +183,10 @@ export default function Schedule() {
                   </View>
                   <View style={styles.dividerLine} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.patientName}>{a.patient_name}</Text>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.patientName}>{a.patient_name}</Text>
+                      {a.recurrence_id ? <Text style={styles.repeatTag}>🔁</Text> : null}
+                    </View>
                     {a.notes ? <Text style={styles.notes} numberOfLines={1}>{a.notes}</Text> : null}
                   </View>
                   <TouchableOpacity onPress={() => appointmentActions(a)} style={styles.moreBtn}>
@@ -207,7 +231,9 @@ const styles = StyleSheet.create({
   time: { fontSize: 14, fontWeight: '700', color: colors.accent },
   duration: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
   dividerLine: { width: 1, height: 36, backgroundColor: colors.cardBorder },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   patientName: { ...typography.body, fontWeight: '600' },
+  repeatTag: { fontSize: 12 },
   notes: { ...typography.small, marginTop: 2 },
   moreBtn: { padding: spacing.xs },
   moreText: { color: colors.textMuted, fontSize: 18, fontWeight: '700' },

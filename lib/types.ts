@@ -19,6 +19,7 @@ export interface Appointment {
   duration: number;
   notes?: string;
   status: 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+  recurrence_id?: string;   // tekrarlayan serinin ortak kimliği (tek seferlikte boş)
   created_at: string;
   updated_at: string;
 }
