@@ -84,6 +84,7 @@ export interface Assessment {
   interpretation?: string;
   date?: string;
   notes?: string;
+  answers?: string;   // uygulama içinde dolduruldu ise madde yanıtları (JSON number[])
 }
 
 export interface Homework {

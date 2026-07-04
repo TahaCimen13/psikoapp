@@ -91,7 +91,8 @@ export async function initDatabase(): Promise<void> {
       score REAL,
       interpretation TEXT,
       date TEXT,
-      notes TEXT
+      notes TEXT,
+      answers TEXT
     );
 
     CREATE TABLE IF NOT EXISTS homework (
@@ -251,6 +252,12 @@ async function runMigrations(): Promise<void> {
 
   try {
     await db.execAsync('ALTER TABLE patients ADD COLUMN session_fee REAL');
+  } catch {}
+
+  // Uygulama içinde doldurulan testlerin madde yanıtları (JSON dizi) —
+  // tamamlanmış test PDF'inde seçimlerin işaretlenebilmesi için saklanır
+  try {
+    await db.execAsync('ALTER TABLE assessments ADD COLUMN answers TEXT');
   } catch {}
 
   // KVKK 2026/347: aydınlatma metni versiyonu rızadan ayrı loglanır

@@ -43,6 +43,8 @@ export default function ScaleFillScreen() {
     }
     const rawSum = Object.values(answers).reduce((a, b) => a + b, 0);
     const r = interpretScore(scale, rawSum);
+    // Madde yanıtları saklanır: tamamlanmış test PDF'inde seçimler işaretlenir
+    const answerList = scale.items!.map((_, i) => answers[i]);
     await addAssessment({
       patient_id: id,
       test_name: scale.abbreviation,
@@ -50,6 +52,7 @@ export default function ScaleFillScreen() {
       interpretation: r.band?.label,
       date: new Date().toISOString().split('T')[0],
       notes: 'Uygulama içinde dolduruldu.',
+      answers: JSON.stringify(answerList),
     });
     if (homeworkId) {
       await updateHomework(homeworkId, { status: 'completed' });

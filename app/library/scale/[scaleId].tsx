@@ -7,6 +7,7 @@ import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
 import { getScale, isFillable } from '@/lib/scales';
+import { scaleFormHtml, scaleReferenceHtml } from '@/lib/scalePdf';
 import type { Patient } from '@/lib/types';
 
 // Ölçek referans kartı: puanlama, kesme noktaları, klinik notlar ve
@@ -38,38 +39,16 @@ export default function ScaleDetail() {
     router.push(`/patient/${p.id}/scale/${scale.id}`);
   };
 
-  // Kâğıt uygulama için çıktı: maddeler + boş yanıt kutuları
+  // PDF çıktısı: doldurulabilir ölçekte boş uygulama formu, telifli
+  // ölçekte puanlama/kesme noktası referans kartı
   const printPdf = async () => {
-    if (!scale?.items || !scale.responseOptions) return;
+    if (!scale) return;
     setPrinting(true);
     try {
-      const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const optHeads = scale.responseOptions.map(o => `<th>${esc(o.label)}<br/>(${o.value})</th>`).join('');
-      const rows = scale.items.map((item, i) =>
-        `<tr><td class="q">${i + 1}. ${esc(item)}</td>${scale.responseOptions!.map(() => '<td class="c">☐</td>').join('')}</tr>`
-      ).join('');
-      const html = `
-        <html><head><meta charset="utf-8"><style>
-          body { font-family: -apple-system, sans-serif; color: #0F172A; padding: 24px; font-size: 12px; }
-          h1 { font-size: 17px; margin-bottom: 2px; }
-          .meta { color: #64748B; font-size: 11px; margin-bottom: 14px; }
-          .who { margin-bottom: 14px; font-size: 12px; }
-          .who span { display: inline-block; min-width: 200px; border-bottom: 1px solid #94A3B8; margin-left: 4px; }
-          table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #CBD5E1; padding: 6px; text-align: center; font-size: 11px; }
-          td.q { text-align: left; font-size: 12px; }
-          td.c { font-size: 14px; width: 52px; }
-          .footer { margin-top: 16px; color: #94A3B8; font-size: 10px; }
-        </style></head><body>
-          <h1>${esc(scale.name)} (${esc(scale.abbreviation)})</h1>
-          <p class="meta">${esc(scale.timeFrame)} düşünülerek yanıtlanır · ${scale.items.length} madde</p>
-          <p class="who">Ad Soyad: <span></span> &nbsp; Tarih: <span style="min-width:100px"></span></p>
-          <table><tr><th style="text-align:left">Madde</th>${optHeads}</tr>${rows}</table>
-          <p class="footer">PsikoApp ile hazırlanmıştır. Puanlama: ${esc(scale.scoring)}</p>
-        </body></html>`;
+      const html = isFillable(scale) ? scaleFormHtml(scale) : scaleReferenceHtml(scale);
       const { uri } = await Print.printToFileAsync({ html });
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: `${scale.abbreviation} formu` });
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: `${scale.abbreviation} ${isFillable(scale) ? 'formu' : 'referans kartı'}` });
       }
     } catch (e: any) {
       Alert.alert('Hata', e.message || 'PDF oluşturulamadı.');
@@ -114,17 +93,15 @@ export default function ScaleDetail() {
             <Text style={styles.actionText}>Ödev Ata</Text>
           </TouchableOpacity>
           {isFillable(scale) && (
-            <>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => setPickerMode('doldur')}>
-                <Icon name="phone-portrait-outline" size={16} color={colors.accent} />
-                <Text style={styles.actionText}>Uygulamada Doldurt</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn} onPress={printPdf} disabled={printing}>
-                <Icon name="print-outline" size={16} color={colors.accent} />
-                <Text style={styles.actionText}>{printing ? '...' : 'PDF Çıktısı'}</Text>
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => setPickerMode('doldur')}>
+              <Icon name="phone-portrait-outline" size={16} color={colors.accent} />
+              <Text style={styles.actionText}>Uygulamada Doldurt</Text>
+            </TouchableOpacity>
           )}
+          <TouchableOpacity style={styles.actionBtn} onPress={printPdf} disabled={printing}>
+            <Icon name="print-outline" size={16} color={colors.accent} />
+            <Text style={styles.actionText}>{printing ? '...' : 'PDF Çıktısı'}</Text>
+          </TouchableOpacity>
         </View>
 
         <Section title="Puanlama">

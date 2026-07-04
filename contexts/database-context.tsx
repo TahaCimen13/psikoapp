@@ -360,8 +360,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     const db = getDb();
     const a: Assessment = { id: generateId(), ...data };
     await db.runAsync(
-      'INSERT INTO assessments (id, patient_id, test_name, score, interpretation, date, notes) VALUES (?,?,?,?,?,?,?)',
-      [a.id, a.patient_id, a.test_name, a.score ?? null, a.interpretation ?? null, a.date ?? null, a.notes ?? null]
+      'INSERT INTO assessments (id, patient_id, test_name, score, interpretation, date, notes, answers) VALUES (?,?,?,?,?,?,?,?)',
+      [a.id, a.patient_id, a.test_name, a.score ?? null, a.interpretation ?? null, a.date ?? null, a.notes ?? null, a.answers ?? null]
     );
     return a;
   }, []);

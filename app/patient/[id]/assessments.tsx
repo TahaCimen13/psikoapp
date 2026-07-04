@@ -215,15 +215,14 @@ export default function AssessmentsScreen() {
                     )}
                   </View>
 
-                  {scale && (
-                    <View style={styles.cutoffStrip}>
-                      {scale.cutoffs.map((c, i) => (
-                        <View key={i} style={styles.cutoffItem}>
-                          <View style={[styles.cutoffDot, { backgroundColor: c.color }]} />
-                          <Text style={styles.cutoffText}>{c.range} {c.label}</Text>
-                        </View>
-                      ))}
-                    </View>
+                  {detail.answers && (
+                    <TouchableOpacity
+                      style={styles.pdfBtn}
+                      onPress={() => { setDetail(null); router.push(`/patient/${id}/assessment-pdf/${detail.id}`); }}
+                    >
+                      <Icon name="document-text-outline" size={16} color="#fff" />
+                      <Text style={styles.pdfBtnText}>Test Formunu Gör (PDF)</Text>
+                    </TouchableOpacity>
                   )}
 
                   <Text style={[styles.label, { marginTop: spacing.sm }]}>Yorum</Text>
@@ -312,10 +311,8 @@ const styles = StyleSheet.create({
   scoreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   bandBadge: { borderRadius: radius.full, paddingHorizontal: spacing.sm + 2, paddingVertical: 7, borderWidth: 1 },
   bandBadgeText: { fontSize: 13, fontWeight: '700' },
-  cutoffStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, backgroundColor: colors.background, borderRadius: radius.sm, padding: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder },
-  cutoffItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  cutoffDot: { width: 8, height: 8, borderRadius: 4 },
-  cutoffText: { color: colors.textSecondary, fontSize: 11 },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, backgroundColor: colors.accent, borderRadius: radius.md, paddingVertical: spacing.sm + 2 },
+  pdfBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   scaleLink: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', backgroundColor: colors.accentDim, borderRadius: radius.full, paddingHorizontal: spacing.sm + 2, paddingVertical: 6, borderWidth: 1, borderColor: colors.accent + '40' },
   scaleLinkText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
 });
