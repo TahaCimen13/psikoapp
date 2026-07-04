@@ -3,13 +3,19 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
+import { Icon } from '@/components/ui/Icon';
+import { SCALES, interpretScore, type Scale } from '@/lib/scales';
 import { ASSESSMENT_TESTS } from '@/lib/types';
 import type { Assessment } from '@/lib/types';
+
+// Test adını gömülü ölçek referansıyla eşleştir (örn. "PHQ-9", "BDI-II (Beck...)")
+const scaleForTest = (testName: string): Scale | undefined =>
+  SCALES.find(s => testName.toUpperCase().includes(s.abbreviation.toUpperCase()));
 
 export default function AssessmentsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getAssessmentsByPatient, addAssessment, deleteAssessment } = useDatabase();
+  const { getAssessmentsByPatient, addAssessment, updateAssessment, deleteAssessment } = useDatabase();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [adding, setAdding] = useState(false);
   const [testName, setTestName] = useState('');
@@ -17,6 +23,37 @@ export default function AssessmentsScreen() {
   const [score, setScore] = useState('');
   const [interpretation, setInterpretation] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Detay/düzenleme: karta dokununca açılır
+  const [detail, setDetail] = useState<Assessment | null>(null);
+  const [editScore, setEditScore] = useState('');
+  const [editInterpretation, setEditInterpretation] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editDirty, setEditDirty] = useState(false);
+
+  const openDetail = (a: Assessment) => {
+    setDetail(a);
+    setEditScore(a.score !== undefined && a.score !== null ? String(a.score) : '');
+    setEditInterpretation(a.interpretation ?? '');
+    setEditNotes(a.notes ?? '');
+    setEditDirty(false);
+  };
+
+  const saveDetail = async () => {
+    if (!detail) return;
+    const parsed = parseFloat(editScore.replace(',', '.'));
+    const newScore = Number.isFinite(parsed) ? parsed : undefined;
+    // Puan değiştiyse ve ölçek tanınıyorsa yorumu banda göre tazele
+    const scale = scaleForTest(detail.test_name);
+    let interp = editInterpretation.trim();
+    if (scale && newScore !== undefined && newScore !== detail.score && interp === (detail.interpretation ?? '')) {
+      const raw = scale.scoreMultiplier ? newScore / scale.scoreMultiplier : newScore;
+      interp = interpretScore(scale, raw).band?.label ?? interp;
+    }
+    await updateAssessment(detail.id, { score: newScore, interpretation: interp || undefined, notes: editNotes.trim() || undefined });
+    setDetail(null);
+    load();
+  };
 
   const load = useCallback(async () => {
     const a = await getAssessmentsByPatient(id);
@@ -68,26 +105,35 @@ export default function AssessmentsScreen() {
             <Text style={styles.emptyText}>Henüz değerlendirme eklenmemiş</Text>
           </View>
         ) : (
-          assessments.map(a => (
-            <View key={a.id} style={styles.card}>
-              <View style={styles.cardTop}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.testName}>{a.test_name}</Text>
-                  {a.date ? <Text style={styles.date}>📅 {a.date}</Text> : null}
-                </View>
-                {a.score !== undefined && a.score !== null ? (
-                  <View style={styles.scoreBadge}>
-                    <Text style={styles.scoreText}>{a.score}</Text>
+          assessments.map(a => {
+            const scale = scaleForTest(a.test_name);
+            const raw = scale && a.score !== undefined && a.score !== null
+              ? (scale.scoreMultiplier ? a.score / scale.scoreMultiplier : a.score)
+              : null;
+            const band = scale && raw !== null ? interpretScore(scale, raw).band : null;
+            return (
+              <TouchableOpacity key={a.id} style={styles.card} onPress={() => openDetail(a)}>
+                <View style={styles.cardTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.testName}>{a.test_name}</Text>
+                    {a.date ? <Text style={styles.date}>📅 {a.date}</Text> : null}
                   </View>
+                  {a.score !== undefined && a.score !== null ? (
+                    <View style={[styles.scoreBadge, band ? { backgroundColor: band.color + '18' } : null]}>
+                      <Text style={[styles.scoreText, band ? { color: band.color } : null]}>{a.score}</Text>
+                    </View>
+                  ) : null}
+                  <Icon name="chevron-forward" size={18} color={colors.textMuted} />
+                </View>
+                {band ? (
+                  <Text style={[styles.interpretation, { color: band.color, fontWeight: '600' }]}>{band.label}</Text>
+                ) : a.interpretation ? (
+                  <Text style={styles.interpretation}>{a.interpretation}</Text>
                 ) : null}
-                <TouchableOpacity onPress={() => remove(a)}>
-                  <Text style={{ color: colors.textMuted, fontSize: 18 }}>🗑</Text>
-                </TouchableOpacity>
-              </View>
-              {a.interpretation ? <Text style={styles.interpretation}>{a.interpretation}</Text> : null}
-              {a.notes ? <Text style={styles.notesText}>{a.notes}</Text> : null}
-            </View>
-          ))
+                {a.notes ? <Text style={styles.notesText} numberOfLines={2}>{a.notes}</Text> : null}
+              </TouchableOpacity>
+            );
+          })
         )}
       </ScrollView>
 
@@ -128,6 +174,102 @@ export default function AssessmentsScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Değerlendirme detayı: puan bandı, düzenleme, ölçek referansı, silme */}
+      <Modal visible={detail !== null} transparent animationType="slide" onRequestClose={() => setDetail(null)}>
+        <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modal}>
+            {detail && (() => {
+              const scale = scaleForTest(detail.test_name);
+              const parsed = parseFloat(editScore.replace(',', '.'));
+              const liveRaw = scale && Number.isFinite(parsed)
+                ? (scale.scoreMultiplier ? parsed / scale.scoreMultiplier : parsed)
+                : null;
+              const liveBand = scale && liveRaw !== null ? interpretScore(scale, liveRaw).band : null;
+              return (
+                <>
+                  <View style={styles.detailHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalTitle}>{detail.test_name}</Text>
+                      {detail.date ? <Text style={styles.date}>📅 {detail.date}</Text> : null}
+                    </View>
+                    <TouchableOpacity onPress={() => { const a = detail; setDetail(null); remove(a); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Icon name="trash-outline" size={20} color={colors.error} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={styles.label}>Puan</Text>
+                  <View style={styles.scoreRow}>
+                    <TextInput
+                      style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                      value={editScore}
+                      onChangeText={t => { setEditScore(t); setEditDirty(true); }}
+                      placeholder="Puan"
+                      placeholderTextColor={colors.placeholder}
+                      keyboardType="numeric"
+                    />
+                    {liveBand && (
+                      <View style={[styles.bandBadge, { backgroundColor: liveBand.color + '18', borderColor: liveBand.color + '60' }]}>
+                        <Text style={[styles.bandBadgeText, { color: liveBand.color }]}>{liveBand.label}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {scale && (
+                    <View style={styles.cutoffStrip}>
+                      {scale.cutoffs.map((c, i) => (
+                        <View key={i} style={styles.cutoffItem}>
+                          <View style={[styles.cutoffDot, { backgroundColor: c.color }]} />
+                          <Text style={styles.cutoffText}>{c.range} {c.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <Text style={[styles.label, { marginTop: spacing.sm }]}>Yorum</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editInterpretation}
+                    onChangeText={t => { setEditInterpretation(t); setEditDirty(true); }}
+                    placeholder="Klinik yorum"
+                    placeholderTextColor={colors.placeholder}
+                  />
+
+                  <Text style={styles.label}>Notlar</Text>
+                  <TextInput
+                    style={[styles.input, { minHeight: 60 }]}
+                    value={editNotes}
+                    onChangeText={t => { setEditNotes(t); setEditDirty(true); }}
+                    placeholder="Ek notlar (uygulama koşulları, gözlemler...)"
+                    placeholderTextColor={colors.placeholder}
+                    multiline
+                    textAlignVertical="top"
+                  />
+
+                  {scale && (
+                    <TouchableOpacity
+                      style={styles.scaleLink}
+                      onPress={() => { setDetail(null); router.push(`/library/scale/${scale.id}`); }}
+                    >
+                      <Icon name="library-outline" size={15} color={colors.accent} />
+                      <Text style={styles.scaleLinkText}>{scale.abbreviation} referans kartını aç</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity onPress={() => setDetail(null)}>
+                      <Text style={styles.cancelText}>Kapat</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.saveBtn, !editDirty && { opacity: 0.4 }]} onPress={saveDetail} disabled={!editDirty}>
+                      <Text style={styles.saveBtnText}>Kaydet</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -166,4 +308,14 @@ const styles = StyleSheet.create({
   cancelText: { color: colors.textSecondary, fontSize: 15 },
   saveBtn: { backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   saveBtnText: { color: '#fff', fontWeight: '700' },
+  detailHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  bandBadge: { borderRadius: radius.full, paddingHorizontal: spacing.sm + 2, paddingVertical: 7, borderWidth: 1 },
+  bandBadgeText: { fontSize: 13, fontWeight: '700' },
+  cutoffStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, backgroundColor: colors.background, borderRadius: radius.sm, padding: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder },
+  cutoffItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  cutoffDot: { width: 8, height: 8, borderRadius: 4 },
+  cutoffText: { color: colors.textSecondary, fontSize: 11 },
+  scaleLink: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', backgroundColor: colors.accentDim, borderRadius: radius.full, paddingHorizontal: spacing.sm + 2, paddingVertical: 6, borderWidth: 1, borderColor: colors.accent + '40' },
+  scaleLinkText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
 });

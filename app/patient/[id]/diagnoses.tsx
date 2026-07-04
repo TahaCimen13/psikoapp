@@ -3,7 +3,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
-import { searchDiagnoses } from '@/lib/dsm5';
+import { Icon } from '@/components/ui/Icon';
+import { searchDiagnoses, getDiagnosisByCode } from '@/lib/dsm5';
 import type { Diagnosis } from '@/lib/types';
 
 const SEVERITIES: { value: Diagnosis['severity']; label: string }[] = [
@@ -15,7 +16,7 @@ const SEVERITIES: { value: Diagnosis['severity']; label: string }[] = [
 export default function DiagnosesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getDiagnosesByPatient, addDiagnosis, deleteDiagnosis } = useDatabase();
+  const { getDiagnosesByPatient, addDiagnosis, updateDiagnosis, deleteDiagnosis } = useDatabase();
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState('');
@@ -24,6 +25,30 @@ export default function DiagnosesScreen() {
   const [severity, setSeverity] = useState<Diagnosis['severity']>('orta');
   const [isPrimary, setIsPrimary] = useState(false);
   const [notes, setNotes] = useState('');
+
+  // Detay/düzenleme: karta dokununca açılır
+  const [detail, setDetail] = useState<Diagnosis | null>(null);
+  const [editSeverity, setEditSeverity] = useState<Diagnosis['severity']>('orta');
+  const [editPrimary, setEditPrimary] = useState(false);
+  const [editNotes, setEditNotes] = useState('');
+  const [showCriteria, setShowCriteria] = useState(false);
+  const [editDirty, setEditDirty] = useState(false);
+
+  const openDetail = (d: Diagnosis) => {
+    setDetail(d);
+    setEditSeverity(d.severity ?? 'orta');
+    setEditPrimary(!!d.is_primary);
+    setEditNotes(d.notes ?? '');
+    setShowCriteria(false);
+    setEditDirty(false);
+  };
+
+  const saveDetail = async () => {
+    if (!detail) return;
+    await updateDiagnosis(detail.id, { severity: editSeverity, is_primary: editPrimary, notes: editNotes.trim() || undefined });
+    setDetail(null);
+    load();
+  };
 
   const load = useCallback(async () => {
     const d = await getDiagnosesByPatient(id);
@@ -73,23 +98,21 @@ export default function DiagnosesScreen() {
           </View>
         ) : (
           diagnoses.map(d => (
-            <View key={d.id} style={styles.card}>
+            <TouchableOpacity key={d.id} style={styles.card} onPress={() => openDetail(d)}>
               <View style={styles.cardTop}>
                 <View style={{ flex: 1 }}>
                   {d.is_primary && <View style={styles.primaryBadge}><Text style={styles.primaryText}>Birincil</Text></View>}
                   <Text style={styles.diagName}>{d.dsm_name || 'Belirtilmemiş'}</Text>
                   {d.dsm_code ? <Text style={styles.diagCode}>{d.dsm_code}</Text> : null}
                 </View>
-                <TouchableOpacity onPress={() => remove(d)}>
-                  <Text style={{ color: colors.textMuted, fontSize: 18 }}>🗑</Text>
-                </TouchableOpacity>
+                <Icon name="chevron-forward" size={18} color={colors.textMuted} />
               </View>
               <View style={styles.cardMeta}>
                 {d.severity ? <SeverityBadge severity={d.severity} /> : null}
                 {d.date ? <Text style={styles.metaText}>📅 {d.date}</Text> : null}
               </View>
-              {d.notes ? <Text style={styles.diagNotes}>{d.notes}</Text> : null}
-            </View>
+              {d.notes ? <Text style={styles.diagNotes} numberOfLines={2}>{d.notes}</Text> : null}
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -135,6 +158,80 @@ export default function DiagnosesScreen() {
                 <Text style={styles.saveBtnText}>Kaydet</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Tanı detayı: DSM kriterleri (referans) + düzenleme + silme */}
+      <Modal visible={detail !== null} transparent animationType="slide" onRequestClose={() => setDetail(null)}>
+        <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modal}>
+            {detail && (() => {
+              const dsm = detail.dsm_code ? getDiagnosisByCode(detail.dsm_code) : undefined;
+              return (
+                <>
+                  <View style={styles.detailHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalTitle}>{detail.dsm_name || 'Tanı'}</Text>
+                      {detail.dsm_code ? <Text style={styles.diagCode}>{detail.dsm_code}{detail.date ? ` · ${detail.date}` : ''}</Text> : null}
+                    </View>
+                    <TouchableOpacity onPress={() => { const d = detail; setDetail(null); remove(d); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Icon name="trash-outline" size={20} color={colors.error} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView style={{ maxHeight: 440 }} keyboardShouldPersistTaps="handled">
+                    {dsm && (
+                      <TouchableOpacity style={styles.criteriaToggle} onPress={() => setShowCriteria(v => !v)}>
+                        <Icon name={showCriteria ? 'chevron-down' : 'chevron-forward'} size={16} color={colors.accent} />
+                        <Text style={styles.criteriaToggleText}>DSM-5 Tanı Kriterleri ({dsm.criteria.length})</Text>
+                      </TouchableOpacity>
+                    )}
+                    {dsm && showCriteria && (
+                      <View style={styles.criteriaBox}>
+                        {dsm.criteria.map((c, i) => (
+                          <Text key={i} style={styles.criteriaText}>• {c}</Text>
+                        ))}
+                        {dsm.notes ? <Text style={styles.criteriaNote}>{dsm.notes}</Text> : null}
+                        <Text style={styles.criteriaDisclaimer}>Referans amaçlıdır; tanı klinik değerlendirmeyle konur.</Text>
+                      </View>
+                    )}
+
+                    <Text style={[styles.label, { marginTop: spacing.sm }]}>Şiddet</Text>
+                    <View style={styles.chipRow}>
+                      {SEVERITIES.map(s => (
+                        <TouchableOpacity key={s.value} style={[styles.chip, editSeverity === s.value && styles.chipActive]} onPress={() => { setEditSeverity(s.value); setEditDirty(true); }}>
+                          <Text style={[styles.chipText, editSeverity === s.value && styles.chipTextActive]}>{s.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <TouchableOpacity style={styles.primaryToggle} onPress={() => { setEditPrimary(p => !p); setEditDirty(true); }}>
+                      <Text style={styles.primaryToggleText}>{editPrimary ? '☑' : '☐'} Birincil Tanı</Text>
+                    </TouchableOpacity>
+
+                    <TextInput
+                      style={[styles.input, { minHeight: 70 }]}
+                      value={editNotes}
+                      onChangeText={t => { setEditNotes(t); setEditDirty(true); }}
+                      placeholder="Notlar (seyir, ayırıcı tanı düşünceleri...)"
+                      placeholderTextColor={colors.placeholder}
+                      multiline
+                      textAlignVertical="top"
+                    />
+                  </ScrollView>
+
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity onPress={() => setDetail(null)}>
+                      <Text style={styles.cancelText}>Kapat</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.saveBtn, !editDirty && { opacity: 0.4 }]} onPress={saveDetail} disabled={!editDirty}>
+                      <Text style={styles.saveBtnText}>Kaydet</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -193,6 +290,13 @@ const styles = StyleSheet.create({
   primaryToggle: { marginBottom: spacing.sm },
   primaryToggleText: { color: colors.text, fontSize: 14 },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.lg, marginTop: spacing.md },
+  detailHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm },
+  criteriaToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: spacing.xs },
+  criteriaToggleText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
+  criteriaBox: { backgroundColor: colors.background, borderRadius: radius.sm, padding: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder, marginTop: spacing.xs, gap: 6 },
+  criteriaText: { color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  criteriaNote: { color: colors.textMuted, fontSize: 12, fontStyle: 'italic', marginTop: 4 },
+  criteriaDisclaimer: { color: colors.textMuted, fontSize: 11, marginTop: 4 },
   cancelText: { color: colors.textSecondary, fontSize: 15 },
   saveBtn: { backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   saveBtnText: { color: '#fff', fontWeight: '700' },

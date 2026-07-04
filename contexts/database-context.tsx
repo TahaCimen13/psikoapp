@@ -43,11 +43,13 @@ interface DatabaseContextType {
   // Diagnoses
   getDiagnosesByPatient: (patientId: string) => Promise<Diagnosis[]>;
   addDiagnosis: (data: Omit<Diagnosis, 'id' | 'created_at'>) => Promise<Diagnosis>;
+  updateDiagnosis: (id: string, data: Partial<Diagnosis>) => Promise<void>;
   deleteDiagnosis: (id: string) => Promise<void>;
 
   // Assessments
   getAssessmentsByPatient: (patientId: string) => Promise<Assessment[]>;
   addAssessment: (data: Omit<Assessment, 'id'>) => Promise<Assessment>;
+  updateAssessment: (id: string, data: Partial<Assessment>) => Promise<void>;
   deleteAssessment: (id: string) => Promise<void>;
 
   // Homework
@@ -332,6 +334,19 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     return d;
   }, []);
 
+  const updateDiagnosis = useCallback(async (id: string, data: Partial<Diagnosis>) => {
+    const db = getDb();
+    // Birincil tanı tektir: bu kayıt birincil yapılıyorsa diğerlerini düşür
+    if (data.is_primary) {
+      const row = await db.getFirstAsync<{ patient_id: string }>('SELECT patient_id FROM diagnoses WHERE id=?', [id]);
+      if (row) await db.runAsync('UPDATE diagnoses SET is_primary=0 WHERE patient_id=?', [row.patient_id]);
+    }
+    await db.runAsync(
+      'UPDATE diagnoses SET severity=COALESCE(?,severity), is_primary=COALESCE(?,is_primary), notes=COALESCE(?,notes), date=COALESCE(?,date) WHERE id=?',
+      [data.severity ?? null, data.is_primary === undefined ? null : (data.is_primary ? 1 : 0), data.notes ?? null, data.date ?? null, id]
+    );
+  }, []);
+
   const deleteDiagnosis = useCallback(async (id: string) => {
     await getDb().runAsync('DELETE FROM diagnoses WHERE id=?', [id]);
   }, []);
@@ -349,6 +364,13 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       [a.id, a.patient_id, a.test_name, a.score ?? null, a.interpretation ?? null, a.date ?? null, a.notes ?? null]
     );
     return a;
+  }, []);
+
+  const updateAssessment = useCallback(async (id: string, data: Partial<Assessment>) => {
+    await getDb().runAsync(
+      'UPDATE assessments SET score=COALESCE(?,score), interpretation=COALESCE(?,interpretation), date=COALESCE(?,date), notes=COALESCE(?,notes) WHERE id=?',
+      [data.score ?? null, data.interpretation ?? null, data.date ?? null, data.notes ?? null, id]
+    );
   }, []);
 
   const deleteAssessment = useCallback(async (id: string) => {
@@ -625,8 +647,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       getAppointmentsByPatient, getUpcomingAppointments, getAppointmentsByRange, addAppointment, updateAppointment, deleteAppointment,
       getSessionsByPatient, getTodaySessions, addSession, updateSession, deleteSession, getSession,
       getNotesBySession, addNote, updateNote, deleteNote, getNoteVersionsBySession,
-      getDiagnosesByPatient, addDiagnosis, deleteDiagnosis,
-      getAssessmentsByPatient, addAssessment, deleteAssessment,
+      getDiagnosesByPatient, addDiagnosis, updateDiagnosis, deleteDiagnosis,
+      getAssessmentsByPatient, addAssessment, updateAssessment, deleteAssessment,
       getHomeworkByPatient, addHomework, updateHomework, deleteHomework,
       getTreatmentPlan, saveTreatmentPlan,
       getActiveConsent, recordConsent, revokeConsent,
