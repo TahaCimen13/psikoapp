@@ -2,16 +2,14 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Keyboa
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useDatabase } from '@/contexts/database-context';
-import { sendMessage, getAIConfig } from '@/lib/claude';
-import { generateId } from '@/lib/id';
+import { sendMessage, getAIConfig, type PatientChatContext } from '@/lib/claude';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
 import type { ChatMessage, Patient } from '@/lib/types';
 
 export default function AIChat() {
-  const { settings, patients, addMessage, deleteConversation, getDiagnosesByPatient, getActiveConsent } = useDatabase();
+  const { settings, patients, addMessage, deleteConversation, getMessages, getDiagnosesByPatient, getSessionsByPatient, getAssessmentsByPatient, getRiskFlagsByPatient, getHomeworkByPatient, getActiveConsent } = useDatabase();
   const router = useRouter();
-  const [conversationId] = useState(generateId());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,9 +21,17 @@ export default function AIChat() {
   const aiConfig = getAIConfig(settings);
   const hasApiKey = !!aiConfig;
 
-  const send = useCallback(async () => {
-    if (!input.trim() || !hasApiKey || loading) return;
-    const userText = input.trim();
+  // Sohbetler kalıcı ve danışan başına ayrı: her danışanın kendi konuşması
+  // vardır, geri dönüldüğünde kaldığı yerden devam eder. Genel sohbet de ayrı.
+  const conversationId = selectedPatient ? `patient-${selectedPatient.id}` : 'general';
+
+  useEffect(() => {
+    getMessages(conversationId).then(setMessages);
+  }, [conversationId, getMessages]);
+
+  const send = useCallback(async (overrideText?: string) => {
+    const userText = (overrideText ?? input).trim();
+    if (!userText || !hasApiKey || loading) return;
     setInput('');
 
     const userMsg = await addMessage({
@@ -41,10 +47,21 @@ export default function AIChat() {
     try {
       const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
 
-      let patientContext;
+      // Zengin bağlam: tanılar + seans özetleri + testler + riskler + ödevler.
+      // Model genel geçer değil, bu danışanın kayıtlarına dayalı yanıt verir.
+      let patientContext: PatientChatContext | undefined;
       if (selectedPatient) {
-        const diagnoses = await getDiagnosesByPatient(selectedPatient.id);
-        patientContext = { patient: selectedPatient, diagnoses };
+        const [diagnoses, sessions, assessments, riskFlags, homework] = await Promise.all([
+          getDiagnosesByPatient(selectedPatient.id),
+          getSessionsByPatient(selectedPatient.id),
+          getAssessmentsByPatient(selectedPatient.id),
+          getRiskFlagsByPatient(selectedPatient.id),
+          getHomeworkByPatient(selectedPatient.id),
+        ]);
+        patientContext = {
+          patient: selectedPatient, diagnoses, sessions, assessments, riskFlags,
+          pendingHomework: homework.filter(h => h.status === 'pending').map(h => h.title),
+        };
       }
 
       // Streaming: yanıt geldikçe ekrana yaz
@@ -66,7 +83,7 @@ export default function AIChat() {
     }
 
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [input, hasApiKey, loading, addMessage, conversationId, messages, selectedPatient, aiConfig]);
+  }, [input, hasApiKey, loading, addMessage, conversationId, messages, selectedPatient, aiConfig, getDiagnosesByPatient, getSessionsByPatient, getAssessmentsByPatient, getRiskFlagsByPatient, getHomeworkByPatient]);
 
   // KVKK: rızası olmayan danışanın verisi AI bağlamına eklenemez
   const selectPatient = useCallback(async (p: Patient) => {
@@ -83,7 +100,7 @@ export default function AIChat() {
   }, [getActiveConsent]);
 
   const clearChat = useCallback(() => {
-    Alert.alert('Sohbeti Temizle', 'Tüm mesajlar kalıcı olarak silinecek. Emin misiniz?', [
+    Alert.alert('Sohbeti Temizle', `${selectedPatient ? selectedPatient.name + ' sohbetindeki' : 'Genel sohbetteki'} tüm mesajlar kalıcı olarak silinecek. Emin misiniz?`, [
       { text: 'İptal', style: 'cancel' },
       {
         text: 'Temizle', style: 'destructive', onPress: async () => {
@@ -92,7 +109,7 @@ export default function AIChat() {
         },
       },
     ]);
-  }, [deleteConversation, conversationId]);
+  }, [deleteConversation, conversationId, selectedPatient]);
 
   if (!hasApiKey) {
     return (
@@ -114,9 +131,9 @@ export default function AIChat() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>AI Asistan</Text>
-          {selectedPatient && (
-            <Text style={styles.patientContext}>Bağlam: {selectedPatient.name}</Text>
-          )}
+          <Text style={styles.patientContext}>
+            {selectedPatient ? `Sohbet: ${selectedPatient.name}` : 'Genel sohbet'}
+          </Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.contextBtn} onPress={() => setShowPatientPicker(!showPatientPicker)}>
@@ -170,7 +187,7 @@ export default function AIChat() {
               <Icon name="sparkles" size={14} color={colors.accent} />
             </View>
             <View style={[styles.bubble, styles.assistantBubble]}>
-              <Text style={styles.bubbleText}>{streamingText}</Text>
+              <MarkdownLite text={streamingText} style={styles.bubbleText} />
             </View>
           </View>
         )}
@@ -182,6 +199,17 @@ export default function AIChat() {
       </ScrollView>
 
 
+      {/* Danışan seçiliyken tek dokunuşluk klinik aksiyonlar */}
+      {selectedPatient && !loading && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActions} style={{ flexGrow: 0 }}>
+          {PATIENT_PROMPTS.map((p, i) => (
+            <TouchableOpacity key={i} style={styles.quickAction} onPress={() => send(p.prompt)}>
+              <Text style={styles.quickActionText}>{p.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
@@ -192,11 +220,25 @@ export default function AIChat() {
           multiline
           maxLength={2000}
         />
-        <TouchableOpacity style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]} onPress={send} disabled={!input.trim() || loading}>
+        <TouchableOpacity style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]} onPress={() => send()} disabled={!input.trim() || loading}>
           <Icon name="arrow-up" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+// Model yanıtlarındaki temel markdown'ı görselleştirir: **kalın**, başlıklar,
+// madde işaretleri. Ham ** işaretlerinin ekranda görünmesini engeller.
+function MarkdownLite({ text, style }: { text: string; style: object | object[] }) {
+  const cleaned = text
+    .replace(/^#{1,4}\s+(.+)$/gm, '**$1**')  // başlıklar → kalın satır
+    .replace(/^(\s*)[*-]\s+/gm, '$1• ');     // liste işaretleri → •
+  const parts = cleaned.split(/\*\*(.+?)\*\*/g);
+  return (
+    <Text style={style}>
+      {parts.map((p, i) => (i % 2 === 1 ? <Text key={i} style={{ fontWeight: '700' }}>{p}</Text> : p))}
+    </Text>
   );
 }
 
@@ -210,7 +252,11 @@ function ChatBubble({ message }: { message: ChatMessage }) {
         </View>
       )}
       <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-        <Text style={[styles.bubbleText, isUser && styles.userBubbleText]}>{message.content}</Text>
+        {isUser ? (
+          <Text style={[styles.bubbleText, styles.userBubbleText]}>{message.content}</Text>
+        ) : (
+          <MarkdownLite text={message.content} style={styles.bubbleText} />
+        )}
       </View>
     </View>
   );
@@ -221,6 +267,15 @@ const SUGGESTIONS = [
   'BDT vaka formülasyonu nasıl yapılır?',
   'TSSB ile Akut Stres Bozuklugu farkı nedir?',
   'Borderline kişilik için terapi yaklaşımları',
+];
+
+// Danışan seçiliyken tek dokunuşla gönderilen hazır istekler.
+// Zengin bağlam (seans özetleri, testler, riskler, ödevler) otomatik eklenir.
+const PATIENT_PROMPTS: { label: string; prompt: string }[] = [
+  { label: '🗓 Seans hazırlığı', prompt: 'Bir sonraki seansa hazırlanmama yardım et: son seanslara ve bekleyen ödevlere göre odak noktaları, sorulacak sorular ve olası müdahaleler öner.' },
+  { label: '📈 Durum özeti', prompt: 'Bu danışanın genel durumunu ve gidişatını kayıtlara dayanarak özetle: ilerleme, test skorlarındaki değişim, dikkat çeken noktalar.' },
+  { label: '📝 Ödev önerisi', prompt: 'Bu danışanın tanısına ve son seanslarına uygun 3 seans arası ödev öner; her biri için kısa uygulama açıklaması ekle.' },
+  { label: '⚠️ Risk değerlendirmesi', prompt: 'Kayıtlardaki risk işaretlerini değerlendir: nelere dikkat etmeliyim, hangi durumda hangi adımı atmalıyım?' },
 ];
 
 const styles = StyleSheet.create({

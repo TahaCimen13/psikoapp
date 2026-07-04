@@ -1,5 +1,5 @@
 import { fetch } from 'expo/fetch';
-import type { Patient, Session, SessionNote, Diagnosis, Assessment, AppSettings } from './types';
+import type { Patient, Session, SessionNote, Diagnosis, Assessment, RiskFlag, AppSettings } from './types';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-5';
@@ -332,6 +332,50 @@ async function callAI(ai: AIConfig, system: string, userMessage: string): Promis
 
 // ---- Genel AI sohbeti ----
 
+// Sohbete danışan bağlamı: temel bilgiler + klinik gidişat (seans özetleri,
+// testler, riskler, ödevler). Ne kadar zengin bağlam, o kadar isabetli yanıt.
+export interface PatientChatContext {
+  patient: Patient;
+  diagnoses: Diagnosis[];
+  sessions?: Session[];
+  assessments?: Assessment[];
+  riskFlags?: RiskFlag[];
+  pendingHomework?: string[];
+}
+
+function buildRichPatientContext(ctx: PatientChatContext): string {
+  const lines: string[] = [buildPatientContext(ctx.patient, ctx.diagnoses)];
+
+  const withSummary = (ctx.sessions ?? []).filter(s => s.summary).slice(0, 3);
+  if (withSummary.length > 0) {
+    lines.push('Son Seans Özetleri:');
+    withSummary.forEach(s => {
+      const d = new Date(s.date).toLocaleDateString('tr-TR');
+      lines.push(`- [${d}] ${s.summary}`);
+    });
+  }
+  const totalSessions = ctx.sessions?.length ?? 0;
+  if (totalSessions > 0) lines.push(`Toplam seans sayısı: ${totalSessions}`);
+
+  const tests = (ctx.assessments ?? []).slice(0, 5);
+  if (tests.length > 0) {
+    lines.push('Değerlendirmeler: ' + tests.map(a =>
+      `${a.test_name}: ${a.score ?? '?'}${a.date ? ` (${new Date(a.date).toLocaleDateString('tr-TR')})` : ''}`
+    ).join(' | '));
+  }
+
+  const activeRisks = (ctx.riskFlags ?? []).filter(r => !r.resolved);
+  if (activeRisks.length > 0) {
+    lines.push('AKTİF RİSKLER: ' + activeRisks.map(r => `${r.category} (${r.level})${r.notes ? `: ${r.notes}` : ''}`).join(' | '));
+  }
+
+  if (ctx.pendingHomework && ctx.pendingHomework.length > 0) {
+    lines.push('Bekleyen ödevler: ' + ctx.pendingHomework.join(', '));
+  }
+
+  return lines.join('\n');
+}
+
 /**
  * AI sohbet mesajı gönderir. onChunk verilirse yanıt SSE streaming ile
  * parça parça iletilir; her durumda tam yanıt metni döndürülür.
@@ -339,12 +383,12 @@ async function callAI(ai: AIConfig, system: string, userMessage: string): Promis
 export async function sendMessage(
   ai: AIConfig,
   messages: ChatTurn[],
-  patientContext?: { patient: Patient; diagnoses: Diagnosis[] },
+  patientContext?: PatientChatContext,
   onChunk?: (chunk: string) => void
 ): Promise<string> {
   let system = BASE_SYSTEM;
   if (patientContext) {
-    system += `\n\n--- HASTA BAĞLAMI ---\n${buildPatientContext(patientContext.patient, patientContext.diagnoses)}`;
+    system += `\n\n--- DANIŞAN BAĞLAMI (psikoloğun kayıtlarından) ---\n${buildRichPatientContext(patientContext)}\nBu verilere dayanarak somut ve bu danışana özgü yanıtlar ver; veri yetersizse bunu belirt.`;
   }
 
   if (onChunk) {
