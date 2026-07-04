@@ -65,8 +65,16 @@ function apiError(status: number): Error {
   return new Error(msg);
 }
 
-function networkError(): Error {
-  return new Error('AI servisine ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+// fetch'in kendisi patladığında (DNS, TLS, geçersiz header...) gerçek sebep
+// teşhis için mesaja eklenir — "internet yok" her zaman doğru teşhis değil.
+function networkError(e?: unknown): Error {
+  const detail = e instanceof Error && e.message ? `\n\nTeknik detay: ${e.message}` : '';
+  return new Error(`AI servisine ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.${detail}`);
+}
+
+/** Ayarlardaki "Bağlantıyı Test Et" için: minimal istek atar, model yanıtını döndürür. */
+export async function testAIConnection(ai: AIConfig): Promise<string> {
+  return createMessage(ai, 'Kısa yanıt ver.', [{ role: 'user', content: 'Merhaba, çalışıyor musun? Tek cümleyle yanıtla.' }]);
 }
 
 // ---- Gizlilik (KVKK): hasta adı API'ye asla gönderilmez ----
@@ -126,8 +134,8 @@ async function createMessage(ai: AIConfig, system: string, messages: ChatTurn[])
       headers: requestHeaders(ai.apiKey),
       body: requestBody(system, messages, false),
     });
-  } catch {
-    throw networkError();
+  } catch (e) {
+    throw networkError(e);
   }
 
   if (!response.ok) {
@@ -160,8 +168,8 @@ async function createGemini(apiKey: string, system: string, messages: ChatTurn[]
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: geminiBody(system, messages),
     });
-  } catch {
-    throw networkError();
+  } catch (e) {
+    throw networkError(e);
   }
   if (!response.ok) throw apiError(response.status);
 
@@ -183,8 +191,8 @@ async function streamGemini(
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: geminiBody(system, messages),
     });
-  } catch {
-    throw networkError();
+  } catch (e) {
+    throw networkError(e);
   }
   if (!response.ok) throw apiError(response.status);
 
@@ -214,7 +222,7 @@ async function streamGemini(
         let event: any;
         try {
           event = JSON.parse(payload);
-        } catch {
+        } catch (e) {
           continue;
         }
         const parts: { text?: string }[] = event.candidates?.[0]?.content?.parts ?? [];
@@ -253,8 +261,8 @@ async function streamMessage(
       headers: requestHeaders(ai.apiKey),
       body: requestBody(system, messages, true),
     });
-  } catch {
-    throw networkError();
+  } catch (e) {
+    throw networkError(e);
   }
 
   if (!response.ok) {
@@ -290,7 +298,7 @@ async function streamMessage(
         let event: any;
         try {
           event = JSON.parse(payload);
-        } catch {
+        } catch (e) {
           continue;
         }
 

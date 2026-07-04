@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { useAuth } from '@/contexts/auth-context';
 import { colors, spacing, radius, typography } from '@/lib/theme';
+import { testAIConnection } from '@/lib/claude';
 
 export default function Settings() {
   const router = useRouter();
@@ -15,6 +16,7 @@ export default function Settings() {
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   // PIN state
   const [pinEnabled, setPinEnabled] = useState(hasPIN);
@@ -46,6 +48,24 @@ export default function Settings() {
     setSaving(false);
     Alert.alert('Kaydedildi', 'Ayarlar başarıyla güncellendi.');
     router.back();
+  };
+
+  // Kaydetmeden, ekranda yazılı anahtarla minimal bir istek atar
+  const testConnection = async () => {
+    const key = (aiProvider === 'gemini' ? geminiKey : apiKey).trim();
+    if (!key) {
+      Alert.alert('Anahtar Yok', 'Önce API anahtarını girin.');
+      return;
+    }
+    setTesting(true);
+    try {
+      const reply = await testAIConnection({ provider: aiProvider, apiKey: key });
+      Alert.alert('✓ Bağlantı Başarılı', `Model yanıt verdi:\n\n"${reply.trim().slice(0, 200)}"`);
+    } catch (e: any) {
+      Alert.alert('Bağlantı Hatası', e.message || 'Bilinmeyen hata.');
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handlePinToggle = async (val: boolean) => {
@@ -241,6 +261,10 @@ export default function Settings() {
         </>
       )}
 
+      <TouchableOpacity style={styles.testBtn} onPress={testConnection} disabled={testing}>
+        <Text style={styles.testBtnText}>{testing ? 'Test ediliyor...' : 'Bağlantıyı Test Et'}</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }]} onPress={save} disabled={saving}>
         <Text style={styles.saveBtnText}>{saving ? 'Kaydediliyor...' : 'Kaydet'}</Text>
       </TouchableOpacity>
@@ -297,6 +321,8 @@ const styles = StyleSheet.create({
   providerText: { color: colors.textSecondary, fontWeight: '600', fontSize: 15 },
   providerTextActive: { color: colors.accentLight },
   providerSub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  testBtn: { borderRadius: radius.md, padding: spacing.sm, alignItems: 'center', borderWidth: 1, borderColor: colors.accent, marginBottom: spacing.sm },
+  testBtnText: { color: colors.accent, fontWeight: '600', fontSize: 14 },
   saveBtn: { backgroundColor: colors.accent, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });
