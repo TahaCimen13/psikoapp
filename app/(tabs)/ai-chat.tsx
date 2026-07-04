@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal } from 'react-native';
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useDatabase } from '@/contexts/database-context';
@@ -129,37 +129,58 @@ export default function AIChat() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
-        <View>
+        <TouchableOpacity style={styles.menuBtn} onPress={() => setShowPatientPicker(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Icon name="menu" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
           <Text style={styles.title}>AI Asistan</Text>
           <Text style={styles.patientContext}>
             {selectedPatient ? `Sohbet: ${selectedPatient.name}` : 'Genel sohbet'}
           </Text>
         </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.contextBtn} onPress={() => setShowPatientPicker(!showPatientPicker)}>
-            <Icon name="person-outline" size={13} color={colors.accentLight} />
-            <Text style={styles.contextBtnText}>{selectedPatient ? 'Değiştir' : 'Danışan'}</Text>
+        {messages.length > 0 && (
+          <TouchableOpacity onPress={clearChat} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Icon name="trash-outline" size={18} color={colors.textMuted} />
           </TouchableOpacity>
-          {messages.length > 0 && (
-            <TouchableOpacity onPress={clearChat} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Icon name="trash-outline" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
+        )}
       </View>
 
-      {showPatientPicker && (
-        <View style={styles.patientPicker}>
-          <TouchableOpacity style={styles.patientOption} onPress={() => { setSelectedPatient(null); setShowPatientPicker(false); }}>
-            <Text style={styles.patientOptionText}>Danışan bağlamı olmadan devam et</Text>
-          </TouchableOpacity>
-          {patients.map(p => (
-            <TouchableOpacity key={p.id} style={styles.patientOption} onPress={() => selectPatient(p)}>
-              <Text style={styles.patientOptionText}>{p.name}</Text>
-            </TouchableOpacity>
-          ))}
+      {/* Soldan açılan sohbet menüsü: genel sohbet + TÜM danışanlar (kaydırılabilir) */}
+      <Modal visible={showPatientPicker} transparent animationType="fade" onRequestClose={() => setShowPatientPicker(false)}>
+        <View style={styles.drawerOverlay}>
+          <View style={styles.drawer}>
+            <Text style={styles.drawerTitle}>Sohbetler</Text>
+            <ScrollView>
+              <TouchableOpacity
+                style={[styles.drawerRow, !selectedPatient && styles.drawerRowActive]}
+                onPress={() => { setSelectedPatient(null); setShowPatientPicker(false); }}
+              >
+                <View style={styles.drawerAvatar}>
+                  <Icon name="chatbubbles-outline" size={16} color={colors.accentLight} />
+                </View>
+                <Text style={[styles.drawerRowText, !selectedPatient && styles.drawerRowTextActive]}>Genel sohbet</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.drawerSection}>Danışanlar</Text>
+              {patients.map(p => {
+                const active = selectedPatient?.id === p.id;
+                return (
+                  <TouchableOpacity key={p.id} style={[styles.drawerRow, active && styles.drawerRowActive]} onPress={() => selectPatient(p)}>
+                    <View style={styles.drawerAvatar}>
+                      <Text style={styles.drawerAvatarText}>{p.name.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <Text style={[styles.drawerRowText, active && styles.drawerRowTextActive]} numberOfLines={1}>{p.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {patients.length === 0 && (
+                <Text style={styles.drawerEmpty}>Henüz danışan yok.</Text>
+              )}
+            </ScrollView>
+          </View>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowPatientPicker(false)} />
         </View>
-      )}
+      </Modal>
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.messages} onContentSizeChange={() => scrollRef.current?.scrollToEnd()}>
         {messages.length === 0 && (
@@ -201,7 +222,7 @@ export default function AIChat() {
 
       {/* Danışan seçiliyken tek dokunuşluk klinik aksiyonlar */}
       {selectedPatient && !loading && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActions} style={{ flexGrow: 0 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActions} style={styles.quickScroll}>
           {PATIENT_PROMPTS.map((p, i) => (
             <TouchableOpacity key={i} style={styles.quickAction} onPress={() => send(p.prompt)}>
               <Text style={styles.quickActionText}>{p.label}</Text>
@@ -280,15 +301,21 @@ const PATIENT_PROMPTS: { label: string; prompt: string }[] = [
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: spacing.md, paddingTop: safeTop + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, padding: spacing.md, paddingTop: safeTop + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
   title: { ...typography.h2 },
   patientContext: { ...typography.small, color: colors.accent, marginTop: 2 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  contextBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentDim, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 4 },
-  contextBtnText: { color: colors.accentLight, fontSize: 12, fontWeight: '600' },
-  patientPicker: { backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.cardBorder, maxHeight: 200 },
-  patientOption: { padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  patientOptionText: { color: colors.text, fontSize: 14 },
+  menuBtn: { paddingRight: spacing.sm },
+  drawerOverlay: { flex: 1, flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.45)' },
+  drawer: { width: '78%', maxWidth: 340, backgroundColor: colors.card, paddingTop: safeTop + spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
+  drawerTitle: { ...typography.h3, marginBottom: spacing.md },
+  drawerSection: { ...typography.label, marginTop: spacing.md, marginBottom: spacing.xs },
+  drawerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, borderRadius: radius.md },
+  drawerRowActive: { backgroundColor: colors.accentDim },
+  drawerAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.accentDim, justifyContent: 'center', alignItems: 'center' },
+  drawerAvatarText: { color: colors.accentLight, fontSize: 15, fontWeight: '700' },
+  drawerRowText: { flex: 1, color: colors.text, fontSize: 15 },
+  drawerRowTextActive: { color: colors.accentLight, fontWeight: '600' },
+  drawerEmpty: { color: colors.textMuted, fontSize: 13, padding: spacing.sm },
   messages: { padding: spacing.md, paddingBottom: 20 },
   welcome: { alignItems: 'center', paddingVertical: spacing.xl },
   welcomeTitle: { ...typography.h3, marginBottom: spacing.sm },
@@ -305,7 +332,9 @@ const styles = StyleSheet.create({
   assistantBubble: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 21 },
   userBubbleText: { color: '#fff' },
-  quickActions: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
+  // Sabit yükseklik: mesajlar çoğaldığında çiplerin dikeyde ezilmesini önler
+  quickScroll: { flexGrow: 0, height: 52 },
+  quickActions: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: spacing.sm },
   quickAction: { backgroundColor: colors.accentDim, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 8, borderWidth: 1, borderColor: colors.accent + '40' },
   quickActionText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   inputRow: { flexDirection: 'row', padding: spacing.sm, gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.cardBorder, backgroundColor: colors.card },
