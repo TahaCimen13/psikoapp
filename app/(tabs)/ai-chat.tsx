@@ -5,7 +5,39 @@ import { useDatabase } from '@/contexts/database-context';
 import { sendMessage, getAIConfig, type PatientChatContext } from '@/lib/claude';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
-import type { ChatMessage, Patient } from '@/lib/types';
+import { SCALES, interpretScore } from '@/lib/scales';
+import type { ChatMessage, Patient, Assessment } from '@/lib/types';
+
+// Seçilen değerlendirmeyi AI'nın inceleyebileceği metne çevirir:
+// puan + bant + (varsa) madde madde yanıtlar. Danışan adı EKLENMEZ (KVKK).
+function buildAssessmentPrompt(a: Assessment): string {
+  const scale = SCALES.find(s => a.test_name.toUpperCase().includes(s.abbreviation.toUpperCase()));
+  const lines: string[] = [
+    `Aşağıdaki test sonucunu incele: genel tabloyu yorumla, öne çıkan maddeleri ve olası risk işaretlerini belirt, seans içinde derinleştirilecek alanlar ve uygun ödev/müdahale öner.`,
+    '',
+    `Test: ${a.test_name}${scale ? ` (${scale.name})` : ''}`,
+    `Tarih: ${a.date ?? 'belirtilmemiş'}`,
+    `Toplam puan: ${a.score ?? '?'}${a.interpretation ? ` — ${a.interpretation}` : ''}`,
+  ];
+  if (scale && a.score !== undefined && a.score !== null) {
+    const raw = scale.scoreMultiplier ? a.score / scale.scoreMultiplier : a.score;
+    const band = interpretScore(scale, raw).band;
+    if (band && !a.interpretation) lines.push(`Şiddet bandı: ${band.label}`);
+    lines.push(`Kesme noktaları: ${scale.cutoffs.map(c => `${c.range}=${c.label}`).join(', ')}`);
+  }
+  if (scale?.items && a.answers) {
+    try {
+      const values: number[] = JSON.parse(a.answers);
+      lines.push('', 'Madde yanıtları:');
+      scale.items.forEach((item, i) => {
+        const v = values[i];
+        const label = scale.responseOptions?.find(o => o.value === v)?.label ?? String(v);
+        lines.push(`${i + 1}. ${item} → ${label} (${v})`);
+      });
+    } catch {}
+  }
+  return lines.join('\n');
+}
 
 export default function AIChat() {
   const { settings, patients, addMessage, deleteConversation, getMessages, getDiagnosesByPatient, getSessionsByPatient, getAssessmentsByPatient, getRiskFlagsByPatient, getHomeworkByPatient, getActiveConsent } = useDatabase();
@@ -16,6 +48,8 @@ export default function AIChat() {
   const [streamingText, setStreamingText] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showPatientPicker, setShowPatientPicker] = useState(false);
+  // Değerlendirme incele: danışanın test kayıtlarından seçim
+  const [assessmentList, setAssessmentList] = useState<Assessment[] | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   const aiConfig = getAIConfig(settings);
@@ -223,6 +257,12 @@ export default function AIChat() {
       {/* Danışan seçiliyken tek dokunuşluk klinik aksiyonlar */}
       {selectedPatient && !loading && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActions} style={styles.quickScroll}>
+          <TouchableOpacity
+            style={styles.quickAction}
+            onPress={async () => setAssessmentList(await getAssessmentsByPatient(selectedPatient.id))}
+          >
+            <Text style={styles.quickActionText}>📊 Değerlendirme incele</Text>
+          </TouchableOpacity>
           {PATIENT_PROMPTS.map((p, i) => (
             <TouchableOpacity key={i} style={styles.quickAction} onPress={() => send(p.prompt)}>
               <Text style={styles.quickActionText}>{p.label}</Text>
@@ -230,6 +270,37 @@ export default function AIChat() {
           ))}
         </ScrollView>
       )}
+
+      {/* Değerlendirme seçimi: seçilen testin detayı incelenmek üzere gönderilir */}
+      <Modal visible={assessmentList !== null} transparent animationType="fade" onRequestClose={() => setAssessmentList(null)}>
+        <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setAssessmentList(null)}>
+          <View style={styles.pickerModal}>
+            <Text style={styles.pickerTitle}>Hangi değerlendirme incelensin?</Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {(assessmentList ?? []).map(a => (
+                <TouchableOpacity
+                  key={a.id}
+                  style={styles.assessmentRow}
+                  onPress={() => { setAssessmentList(null); send(buildAssessmentPrompt(a)); }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.assessmentName}>{a.test_name}</Text>
+                    <Text style={styles.assessmentMeta}>
+                      {a.date ?? ''}{a.interpretation ? ` · ${a.interpretation}` : ''}{a.answers ? ' · madde yanıtları var' : ''}
+                    </Text>
+                  </View>
+                  {a.score !== undefined && a.score !== null && (
+                    <Text style={styles.assessmentScore}>{a.score}</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+              {(assessmentList ?? []).length === 0 && (
+                <Text style={styles.pickerEmpty}>Bu danışanın kayıtlı değerlendirmesi yok. Önce Kütüphane'den bir ölçek uygulayın.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <View style={styles.inputRow}>
         <TextInput
@@ -334,6 +405,14 @@ const styles = StyleSheet.create({
   userBubbleText: { color: '#fff' },
   // Sabit yükseklik: mesajlar çoğaldığında çiplerin dikeyde ezilmesini önler
   quickScroll: { flexGrow: 0, height: 52 },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg },
+  pickerModal: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md },
+  pickerTitle: { ...typography.h3, marginBottom: spacing.sm },
+  pickerEmpty: { color: colors.textMuted, fontSize: 13, lineHeight: 19, padding: spacing.sm, textAlign: 'center' },
+  assessmentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  assessmentName: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  assessmentMeta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  assessmentScore: { color: colors.accent, fontSize: 17, fontWeight: '800' },
   quickActions: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: spacing.sm },
   quickAction: { backgroundColor: colors.accentDim, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 8, borderWidth: 1, borderColor: colors.accent + '40' },
   quickActionText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
