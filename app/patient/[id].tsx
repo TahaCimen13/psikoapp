@@ -133,6 +133,7 @@ export default function PatientProfile() {
           <ActionCard emoji="🎯" title="Tedavi Planı" subtitle="Hedef & teknikler" onPress={() => router.push(`/patient/${id}/treatment`)} />
           <ActionCard emoji="⚠️" title="Risk Takibi" subtitle={activeRiskCount > 0 ? `${activeRiskCount} aktif risk` : 'Aktif risk yok'} badge={activeRiskCount > 0} onPress={() => router.push(`/patient/${id}/risk`)} />
           <ActionCard emoji="📈" title="İlerleme" subtitle="Skor & grafik" onPress={() => router.push(`/patient/${id}/progress`)} />
+          <ActionCard emoji="📄" title="Anamnez" subtitle="Öykü formları" onPress={() => router.push(`/patient/${id}/anamnesis`)} />
         </View>
 
         {/* Seanslar */}
