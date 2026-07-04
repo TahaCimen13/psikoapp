@@ -24,6 +24,7 @@ export async function initDatabase(): Promise<void> {
       contact TEXT,
       background TEXT,
       session_fee REAL,
+      is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -264,6 +265,11 @@ async function runMigrations(): Promise<void> {
   // Tekrarlayan randevu serileri
   try {
     await db.execAsync('ALTER TABLE appointments ADD COLUMN recurrence_id TEXT');
+  } catch {}
+
+  // Danışan aktif/pasif durumu (pasif = süreç bitti, kayıt saklanır)
+  try {
+    await db.execAsync('ALTER TABLE patients ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1');
   } catch {}
 
   // KVKK 2026/347: aydınlatma metni versiyonu rızadan ayrı loglanır

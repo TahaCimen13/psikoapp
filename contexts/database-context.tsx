@@ -12,7 +12,7 @@ interface DatabaseContextType {
   // Patients
   patients: Patient[];
   loadPatients: () => Promise<void>;
-  addPatient: (data: Omit<Patient, 'id' | 'created_at' | 'updated_at'>) => Promise<Patient>;
+  addPatient: (data: Omit<Patient, 'id' | 'created_at' | 'updated_at' | 'is_active'>) => Promise<Patient>;
   updatePatient: (id: string, data: Partial<Patient>) => Promise<void>;
   deletePatient: (id: string) => Promise<void>;
   getPatient: (id: string) => Promise<Patient | null>;
@@ -118,10 +118,13 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [books, setBooks] = useState<Book[]>([]);
   const [settings, setSettings] = useState<AppSettings>({});
 
+  type PatientRow = Omit<Patient, 'is_active'> & { is_active: number };
+  const parsePatient = (r: PatientRow): Patient => ({ ...r, is_active: !!r.is_active });
+
   const loadPatients = useCallback(async () => {
     const db = getDb();
-    const rows = await db.getAllAsync<Patient>('SELECT * FROM patients ORDER BY name ASC');
-    setPatients(rows);
+    const rows = await db.getAllAsync<PatientRow>('SELECT * FROM patients ORDER BY is_active DESC, name ASC');
+    setPatients(rows.map(parsePatient));
   }, []);
 
   const loadBooks = useCallback(async () => {
@@ -145,12 +148,12 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   }, [loadPatients, loadBooks, loadSettings]);
 
   // --- Patients ---
-  const addPatient = useCallback(async (data: Omit<Patient, 'id' | 'created_at' | 'updated_at'>): Promise<Patient> => {
+  const addPatient = useCallback(async (data: Omit<Patient, 'id' | 'created_at' | 'updated_at' | 'is_active'>): Promise<Patient> => {
     const db = getDb();
-    const p: Patient = { id: generateId(), created_at: now(), updated_at: now(), ...data };
+    const p: Patient = { id: generateId(), created_at: now(), updated_at: now(), is_active: true, ...data };
     await db.runAsync(
-      'INSERT INTO patients (id, name, birth_date, gender, contact, background, session_fee, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-      [p.id, p.name, p.birth_date ?? null, p.gender ?? null, p.contact ?? null, p.background ?? null, p.session_fee ?? null, p.created_at, p.updated_at]
+      'INSERT INTO patients (id, name, birth_date, gender, contact, background, session_fee, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [p.id, p.name, p.birth_date ?? null, p.gender ?? null, p.contact ?? null, p.background ?? null, p.session_fee ?? null, 1, p.created_at, p.updated_at]
     );
     await loadPatients();
     return p;
@@ -159,8 +162,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const updatePatient = useCallback(async (id: string, data: Partial<Patient>) => {
     const db = getDb();
     await db.runAsync(
-      'UPDATE patients SET name=COALESCE(?,name), birth_date=COALESCE(?,birth_date), gender=COALESCE(?,gender), contact=COALESCE(?,contact), background=COALESCE(?,background), session_fee=COALESCE(?,session_fee), updated_at=? WHERE id=?',
-      [data.name ?? null, data.birth_date ?? null, data.gender ?? null, data.contact ?? null, data.background ?? null, data.session_fee ?? null, now(), id]
+      'UPDATE patients SET name=COALESCE(?,name), birth_date=COALESCE(?,birth_date), gender=COALESCE(?,gender), contact=COALESCE(?,contact), background=COALESCE(?,background), session_fee=COALESCE(?,session_fee), is_active=COALESCE(?,is_active), updated_at=? WHERE id=?',
+      [data.name ?? null, data.birth_date ?? null, data.gender ?? null, data.contact ?? null, data.background ?? null, data.session_fee ?? null, data.is_active === undefined ? null : (data.is_active ? 1 : 0), now(), id]
     );
     await loadPatients();
   }, [loadPatients]);
@@ -172,7 +175,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   }, [loadPatients]);
 
   const getPatient = useCallback(async (id: string): Promise<Patient | null> => {
-    return getDb().getFirstAsync<Patient>('SELECT * FROM patients WHERE id=?', [id]);
+    const row = await getDb().getFirstAsync<PatientRow>('SELECT * FROM patients WHERE id=?', [id]);
+    return row ? parsePatient(row) : null;
   }, []);
 
   // --- Appointments ---

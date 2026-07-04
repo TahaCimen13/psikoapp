@@ -15,6 +15,9 @@ export default function Patients() {
     patients.filter(p => p.name.toLowerCase().includes(search.toLowerCase())),
     [patients, search]
   );
+  // Aktifler üstte, pasifler ayrı başlık altında listelenir
+  const active = filtered.filter(p => p.is_active);
+  const passive = filtered.filter(p => !p.is_active);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -72,31 +75,48 @@ export default function Patients() {
             )}
           </View>
         ) : (
-          filtered.map(patient => (
-            <TouchableOpacity
-              key={patient.id}
-              style={styles.card}
-              onPress={() => router.push(`/patient/${patient.id}`)}
-            >
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{patient.name.charAt(0).toUpperCase()}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.patientName}>{patient.name}</Text>
-                <View style={styles.metaRow}>
-                  {patient.birth_date && <Text style={styles.meta}>{ageStr(patient.birth_date)}</Text>}
-                  {patient.gender && <Text style={styles.meta}>{genderLabel(patient.gender)}</Text>}
-                </View>
-                {patient.background && (
-                  <Text style={styles.background} numberOfLines={1}>{patient.background}</Text>
-                )}
-              </View>
-              <Text style={styles.arrow}>›</Text>
-            </TouchableOpacity>
-          ))
+          <>
+            {active.map(patient => (
+              <PatientCard key={patient.id} patient={patient} ageStr={ageStr} onPress={() => router.push(`/patient/${patient.id}`)} />
+            ))}
+            {passive.length > 0 && (
+              <>
+                <Text style={styles.passiveHeader}>Pasif Danışanlar ({passive.length})</Text>
+                {passive.map(patient => (
+                  <PatientCard key={patient.id} patient={patient} ageStr={ageStr} passive onPress={() => router.push(`/patient/${patient.id}`)} />
+                ))}
+              </>
+            )}
+          </>
         )}
       </ScrollView>
     </View>
+  );
+}
+
+function PatientCard({ patient, ageStr, passive, onPress }: {
+  patient: import('@/lib/types').Patient;
+  ageStr: (birthDate?: string) => string;
+  passive?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={[styles.card, passive && styles.cardPassive]} onPress={onPress}>
+      <View style={styles.avatar}>
+        <Text style={styles.avatarText}>{patient.name.charAt(0).toUpperCase()}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.patientName}>{patient.name}</Text>
+        <View style={styles.metaRow}>
+          {patient.birth_date ? <Text style={styles.meta}>{ageStr(patient.birth_date)}</Text> : null}
+          {patient.gender ? <Text style={styles.meta}>{genderLabel(patient.gender)}</Text> : null}
+        </View>
+        {patient.background ? (
+          <Text style={styles.background} numberOfLines={1}>{patient.background}</Text>
+        ) : null}
+      </View>
+      <Text style={styles.arrow}>›</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -116,6 +136,8 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, color: colors.text, fontSize: 15, paddingVertical: spacing.sm },
   list: { padding: spacing.md, paddingTop: spacing.sm, paddingBottom: 32 },
   card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder },
+  cardPassive: { opacity: 0.55 },
+  passiveHeader: { ...typography.label, marginTop: spacing.md, marginBottom: spacing.sm },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accentDim, justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: colors.accentLight, fontSize: 20, fontWeight: '700' },
   patientName: { ...typography.body, fontWeight: '600' },

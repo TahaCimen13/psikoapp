@@ -79,9 +79,14 @@ export default function PatientProfile() {
           <Icon name="chevron-back" size={22} color={colors.accent} />
           <Text style={styles.back}>Geri</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={confirmDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Icon name="trash-outline" size={20} color={colors.error} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => router.push(`/patient/${id}/edit`)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Icon name="pencil-outline" size={19} color={colors.accent} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={confirmDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Icon name="trash-outline" size={20} color={colors.error} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}>
@@ -105,6 +110,11 @@ export default function PatientProfile() {
             <Text style={styles.avatarText}>{patient.name.charAt(0).toUpperCase()}</Text>
           </View>
           <Text style={styles.patientName}>{patient.name}</Text>
+          {!patient.is_active && (
+            <View style={styles.passiveBadge}>
+              <Text style={styles.passiveBadgeText}>Pasif — süreç tamamlandı</Text>
+            </View>
+          )}
           <View style={styles.metaRow}>
             {ageStr(patient.birth_date) && <MetaTag label={ageStr(patient.birth_date)!} />}
             {patient.gender && <MetaTag label={{ erkek: 'Erkek', kadin: 'Kadın', diger: 'Diğer' }[patient.gender] ?? patient.gender} />}
@@ -208,6 +218,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: safeTop + spacing.sm },
   backRow: { flexDirection: 'row', alignItems: 'center' },
   back: { color: colors.accent, fontSize: 15, fontWeight: '600' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  passiveBadge: { backgroundColor: colors.textMuted + '20', borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 3, marginBottom: spacing.sm },
+  passiveBadgeText: { color: colors.textSecondary, fontSize: 11, fontWeight: '600' },
   profileCard: { marginHorizontal: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.md },
   avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: colors.accentDim, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.sm },
   avatarText: { color: colors.accentLight, fontSize: 32, fontWeight: '700' },

@@ -8,6 +8,7 @@ export interface Patient {
   contact?: string;
   background?: string;
   session_fee?: number;   // TL cinsinden seans ücreti
+  is_active: boolean;     // pasif = terapi süreci bitmiş/ara vermiş danışan (kayıt silinmez)
   created_at: string;
   updated_at: string;
 }
