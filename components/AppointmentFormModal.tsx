@@ -98,7 +98,7 @@ export default function AppointmentFormModal({ visible, patients, onClose, onSav
           </View>
 
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetContent}>
-            <Text style={styles.fieldLabel}>Hasta</Text>
+            <Text style={styles.fieldLabel}>Danışan</Text>
             {patients.length === 0 ? (
               <Text style={styles.noPatients}>Önce Hastalar sekmesinden hasta eklemelisiniz.</Text>
             ) : (

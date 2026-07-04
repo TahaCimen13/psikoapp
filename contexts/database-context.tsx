@@ -145,8 +145,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     const db = getDb();
     const p: Patient = { id: generateId(), created_at: now(), updated_at: now(), ...data };
     await db.runAsync(
-      'INSERT INTO patients (id, name, birth_date, gender, contact, background, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)',
-      [p.id, p.name, p.birth_date ?? null, p.gender ?? null, p.contact ?? null, p.background ?? null, p.created_at, p.updated_at]
+      'INSERT INTO patients (id, name, birth_date, gender, contact, background, session_fee, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+      [p.id, p.name, p.birth_date ?? null, p.gender ?? null, p.contact ?? null, p.background ?? null, p.session_fee ?? null, p.created_at, p.updated_at]
     );
     await loadPatients();
     return p;
@@ -155,8 +155,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const updatePatient = useCallback(async (id: string, data: Partial<Patient>) => {
     const db = getDb();
     await db.runAsync(
-      'UPDATE patients SET name=COALESCE(?,name), birth_date=COALESCE(?,birth_date), gender=COALESCE(?,gender), contact=COALESCE(?,contact), background=COALESCE(?,background), updated_at=? WHERE id=?',
-      [data.name ?? null, data.birth_date ?? null, data.gender ?? null, data.contact ?? null, data.background ?? null, now(), id]
+      'UPDATE patients SET name=COALESCE(?,name), birth_date=COALESCE(?,birth_date), gender=COALESCE(?,gender), contact=COALESCE(?,contact), background=COALESCE(?,background), session_fee=COALESCE(?,session_fee), updated_at=? WHERE id=?',
+      [data.name ?? null, data.birth_date ?? null, data.gender ?? null, data.contact ?? null, data.background ?? null, data.session_fee ?? null, now(), id]
     );
     await loadPatients();
   }, [loadPatients]);

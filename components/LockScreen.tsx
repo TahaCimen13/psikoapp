@@ -14,7 +14,7 @@ export default function LockScreen() {
   const forgotPIN = () => {
     Alert.alert(
       "PIN'i mi unuttunuz?",
-      'Güvenlik nedeniyle PIN yalnızca tüm uygulama verileri (hastalar, seanslar, notlar) silinerek sıfırlanabilir. Bu işlem geri alınamaz.',
+      'Güvenlik nedeniyle PIN yalnızca tüm uygulama verileri (danışanlar, seanslar, notlar) silinerek sıfırlanabilir. Bu işlem geri alınamaz.',
       [
         { text: 'Vazgeç', style: 'cancel' },
         {

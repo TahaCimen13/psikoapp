@@ -7,6 +7,7 @@ export interface Patient {
   gender?: 'erkek' | 'kadin' | 'diger';
   contact?: string;
   background?: string;
+  session_fee?: number;   // TL cinsinden seans ücreti
   created_at: string;
   updated_at: string;
 }

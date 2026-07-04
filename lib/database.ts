@@ -23,6 +23,7 @@ export async function initDatabase(): Promise<void> {
       gender TEXT,
       contact TEXT,
       background TEXT,
+      session_fee REAL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -235,6 +236,10 @@ async function runMigrations(): Promise<void> {
   } catch {}
   try {
     await db.execAsync('ALTER TABLE sessions ADD COLUMN appointment_id TEXT');
+  } catch {}
+
+  try {
+    await db.execAsync('ALTER TABLE patients ADD COLUMN session_fee REAL');
   } catch {}
 
   // KVKK 2026/347: aydınlatma metni versiyonu rızadan ayrı loglanır

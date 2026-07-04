@@ -8,7 +8,7 @@ const MAX_TOKENS = 2048;
 const BASE_SYSTEM = `Sen deneyimli bir klinik psikolog asistanısın. Türkçe konuşuyorsun.
 
 Amacın psikologların:
-- Hasta vakalarını değerlendirmesine
+- Danışan vakalarını değerlendirmesine
 - DSM-5-TR tanı kriterlerini anlamasına
 - Terapi planlaması yapmasına
 - Psikoeğitim materyalleri hazırlamasına
@@ -18,7 +18,7 @@ yardımcı olmak.
 ETİK KURALLAR:
 - Kesin tanı koyma; tanı kriterlerini açıkla ve değerlendirmeye yardım et
 - İlaç önerme; farmakoterapiyi psikiyatristle görüşmelerini öner
-- Hastanın gizliliğine saygı göster
+- Danışanın gizliliğine saygı göster
 - Acil durumlarda (intihar riski vb.) ilgili protokolleri hatırlat
 
 Yanıtların kısa, net ve klinisyene pratik fayda sağlayacak şekilde olsun.`;
@@ -303,7 +303,7 @@ export async function generatePsychoeducation(
   patient: Patient,
   diagnoses: Diagnosis[]
 ): Promise<string> {
-  const system = `${BASE_SYSTEM}\n\nGörevin: Psikolog tarafından hastaya verilecek, anlaşılır ve empatik bir psikoeğitim metni yazmak. Teknik jargondan kaçın, somut örnekler kullan.`;
+  const system = `${BASE_SYSTEM}\n\nGörevin: Psikolog tarafından danışana verilecek, anlaşılır ve empatik bir psikoeğitim metni yazmak. Teknik jargondan kaçın, somut örnekler kullan.`;
   const prompt = `${buildPatientContext(patient, diagnoses)}\n\nKonu: "${topic}" hakkında bu hastaya uygun bir psikoeğitim metni yaz. Yaklaşık 200-300 kelime.`;
 
   return callClaude(apiKey, system, prompt);

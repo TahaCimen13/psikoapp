@@ -5,6 +5,7 @@ import { useDatabase } from '@/contexts/database-context';
 import { sendMessage } from '@/lib/claude';
 import { generateId } from '@/lib/id';
 import { colors, spacing, radius, typography } from '@/lib/theme';
+import { Icon } from '@/components/ui/Icon';
 import type { ChatMessage, Patient } from '@/lib/types';
 
 export default function AIChat() {
@@ -72,7 +73,7 @@ export default function AIChat() {
     if (!consent) {
       Alert.alert(
         'KVKK Rızası Gerekli',
-        `${p.name} için aktif KVKK rızası yok. Danışan verilerinin AI asistana gönderilebilmesi için önce hasta profilinden rıza kaydı alın.`
+        `${p.name} için aktif KVKK rızası yok. Danışan verilerinin AI asistana gönderilebilmesi için önce danışan profilinden rıza kaydı alın.`
       );
       return;
     }
@@ -95,7 +96,9 @@ export default function AIChat() {
   if (!hasApiKey) {
     return (
       <View style={styles.noKeyContainer}>
-        <Text style={{ fontSize: 44, marginBottom: spacing.md }}>🔑</Text>
+        <View style={{ marginBottom: spacing.md }}>
+          <Icon name="key-outline" size={48} color={colors.textMuted} />
+        </View>
         <Text style={styles.noKeyTitle}>API Anahtarı Gerekli</Text>
         <Text style={styles.noKeyDesc}>AI asistanı kullanmak için Ayarlar ekranından Claude API anahtarınızı girin.</Text>
         <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
@@ -116,11 +119,12 @@ export default function AIChat() {
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.contextBtn} onPress={() => setShowPatientPicker(!showPatientPicker)}>
-            <Text style={styles.contextBtnText}>{selectedPatient ? '👤 Değiştir' : '👤 Hasta'}</Text>
+            <Icon name="person-outline" size={13} color={colors.accentLight} />
+            <Text style={styles.contextBtnText}>{selectedPatient ? 'Değiştir' : 'Danışan'}</Text>
           </TouchableOpacity>
           {messages.length > 0 && (
-            <TouchableOpacity onPress={clearChat}>
-              <Text style={styles.clearBtn}>🗑</Text>
+            <TouchableOpacity onPress={clearChat} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Icon name="trash-outline" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -129,7 +133,7 @@ export default function AIChat() {
       {showPatientPicker && (
         <View style={styles.patientPicker}>
           <TouchableOpacity style={styles.patientOption} onPress={() => { setSelectedPatient(null); setShowPatientPicker(false); }}>
-            <Text style={styles.patientOptionText}>Hasta bağlamı olmadan devam et</Text>
+            <Text style={styles.patientOptionText}>Danışan bağlamı olmadan devam et</Text>
           </TouchableOpacity>
           {patients.map(p => (
             <TouchableOpacity key={p.id} style={styles.patientOption} onPress={() => selectPatient(p)}>
@@ -142,7 +146,9 @@ export default function AIChat() {
       <ScrollView ref={scrollRef} contentContainerStyle={styles.messages} onContentSizeChange={() => scrollRef.current?.scrollToEnd()}>
         {messages.length === 0 && (
           <View style={styles.welcome}>
-            <Text style={{ fontSize: 40, marginBottom: spacing.md }}>🤖</Text>
+            <View style={{ marginBottom: spacing.md }}>
+              <Icon name="sparkles-outline" size={44} color={colors.accent} />
+            </View>
             <Text style={styles.welcomeTitle}>Psikolog Asistanı</Text>
             <Text style={styles.welcomeDesc}>DSM-5 kriterleri, vaka formülasyonu, psikoeğitim ve terapi planlaması konularında yardımcı olabilirim.</Text>
             <View style={styles.suggestionsRow}>
@@ -159,7 +165,9 @@ export default function AIChat() {
         ))}
         {loading && streamingText.length > 0 && (
           <View style={[styles.bubbleWrapper, styles.assistantWrapper]}>
-            <Text style={styles.botIcon}>🤖</Text>
+            <View style={styles.botIcon}>
+              <Icon name="sparkles" size={14} color={colors.accent} />
+            </View>
             <View style={[styles.bubble, styles.assistantBubble]}>
               <Text style={styles.bubbleText}>{streamingText}</Text>
             </View>
@@ -184,7 +192,7 @@ export default function AIChat() {
           maxLength={2000}
         />
         <TouchableOpacity style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]} onPress={send} disabled={!input.trim() || loading}>
-          <Text style={styles.sendBtnText}>↑</Text>
+          <Icon name="arrow-up" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -195,7 +203,11 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
   return (
     <View style={[styles.bubbleWrapper, isUser ? styles.userWrapper : styles.assistantWrapper]}>
-      {!isUser && <Text style={styles.botIcon}>🤖</Text>}
+      {!isUser && (
+        <View style={styles.botIcon}>
+          <Icon name="sparkles" size={14} color={colors.accent} />
+        </View>
+      )}
       <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
         <Text style={[styles.bubbleText, isUser && styles.userBubbleText]}>{message.content}</Text>
       </View>
@@ -216,9 +228,8 @@ const styles = StyleSheet.create({
   title: { ...typography.h2 },
   patientContext: { ...typography.small, color: colors.accent, marginTop: 2 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  contextBtn: { backgroundColor: colors.accentDim, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  contextBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentDim, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 4 },
   contextBtnText: { color: colors.accentLight, fontSize: 12, fontWeight: '600' },
-  clearBtn: { fontSize: 18, padding: spacing.xs },
   patientPicker: { backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.cardBorder, maxHeight: 200 },
   patientOption: { padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
   patientOptionText: { color: colors.text, fontSize: 14 },
@@ -232,7 +243,7 @@ const styles = StyleSheet.create({
   bubbleWrapper: { flexDirection: 'row', marginBottom: spacing.sm, alignItems: 'flex-end', gap: spacing.xs },
   userWrapper: { justifyContent: 'flex-end' },
   assistantWrapper: { justifyContent: 'flex-start' },
-  botIcon: { fontSize: 18, marginBottom: 2 },
+  botIcon: { marginBottom: 4 },
   bubble: { maxWidth: '80%', borderRadius: radius.md, padding: spacing.sm },
   userBubble: { backgroundColor: colors.accent },
   assistantBubble: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
@@ -245,7 +256,6 @@ const styles = StyleSheet.create({
   input: { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, fontSize: 15, maxHeight: 100, borderWidth: 1, borderColor: colors.cardBorder },
   sendBtn: { backgroundColor: colors.accent, width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-end' },
   sendBtnDisabled: { opacity: 0.4 },
-  sendBtnText: { color: '#fff', fontSize: 20, fontWeight: '700' },
   noKeyContainer: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   noKeyTitle: { ...typography.h3, marginBottom: spacing.sm },
   noKeyDesc: { color: colors.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
