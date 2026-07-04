@@ -3,7 +3,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
+import { SCALES, isFillable, type Scale } from '@/lib/scales';
 import type { Homework } from '@/lib/types';
+
+// Ödev başlığı gömülü bir ölçeğe işaret ediyorsa (örn. "PHQ-9 doldur")
+// karta "Uygulamada Doldur" kısayolu eklenir.
+const scaleForHomework = (hw: Homework): Scale | undefined =>
+  SCALES.find(s => isFillable(s) && hw.title.toUpperCase().includes(s.abbreviation.toUpperCase()));
 
 export default function HomeworkScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -68,7 +74,12 @@ export default function HomeworkScreen() {
             {pending.length > 0 && (
               <>
                 <Text style={styles.sectionLabel}>Bekleyen ({pending.length})</Text>
-                {pending.map(hw => <HomeworkCard key={hw.id} hw={hw} onToggle={toggle} onDelete={remove} />)}
+                {pending.map(hw => (
+                  <HomeworkCard
+                    key={hw.id} hw={hw} onToggle={toggle} onDelete={remove}
+                    onFill={scaleForHomework(hw) ? () => router.push(`/patient/${id}/scale/${scaleForHomework(hw)!.id}?homeworkId=${hw.id}`) : undefined}
+                  />
+                ))}
               </>
             )}
             {done.length > 0 && (
@@ -103,7 +114,7 @@ export default function HomeworkScreen() {
   );
 }
 
-function HomeworkCard({ hw, onToggle, onDelete }: { hw: Homework; onToggle: (hw: Homework) => void; onDelete: (hw: Homework) => void }) {
+function HomeworkCard({ hw, onToggle, onDelete, onFill }: { hw: Homework; onToggle: (hw: Homework) => void; onDelete: (hw: Homework) => void; onFill?: () => void }) {
   const done = hw.status === 'completed';
   return (
     <View style={[styles.card, done && styles.cardDone]}>
@@ -114,6 +125,11 @@ function HomeworkCard({ hw, onToggle, onDelete }: { hw: Homework; onToggle: (hw:
         <Text style={[styles.hwTitle, done && styles.hwTitleDone]}>{hw.title}</Text>
         {hw.description ? <Text style={styles.hwDesc}>{hw.description}</Text> : null}
         {hw.due_date ? <Text style={styles.hwDue}>📅 {hw.due_date}</Text> : null}
+        {onFill && (
+          <TouchableOpacity style={styles.fillBtn} onPress={onFill}>
+            <Text style={styles.fillBtnText}>📱 Uygulamada Doldur</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <TouchableOpacity onPress={() => onDelete(hw)}>
         <Text style={{ color: colors.textMuted, fontSize: 16 }}>🗑</Text>
@@ -140,6 +156,8 @@ const styles = StyleSheet.create({
   hwTitleDone: { textDecorationLine: 'line-through', color: colors.textMuted },
   hwDesc: { ...typography.small, marginTop: 2 },
   hwDue: { fontSize: 12, color: colors.accent, marginTop: 4 },
+  fillBtn: { alignSelf: 'flex-start', backgroundColor: colors.accentDim, borderRadius: radius.full, paddingHorizontal: spacing.sm + 2, paddingVertical: 5, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.accent + '40' },
+  fillBtnText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modal: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg },
   modalTitle: { ...typography.h3, marginBottom: spacing.md },

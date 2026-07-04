@@ -26,7 +26,15 @@ export interface Scale {
   notes?: string;           // klinik kullanım notları
   publicDomain: boolean;
   items?: string[];         // yalnızca kamu malı ölçeklerde
-  responseAnchors?: string; // maddelerin yanıt seçenekleri
+  responseAnchors?: string; // maddelerin yanıt seçenekleri (görüntüleme)
+  // Uygulama içinde doldurma desteği (yalnızca maddeleri gömülü ölçekler):
+  responseOptions?: { value: number; label: string }[];
+  scoreMultiplier?: number; // örn. WHO-5: ham toplam × 4 = 0-100
+}
+
+/** Uygulama içinde danışana doldurtulabilen ölçekler */
+export function isFillable(s: Scale): boolean {
+  return !!s.items && !!s.responseOptions;
 }
 
 const GREEN = '#059669';
@@ -56,6 +64,12 @@ export const SCALES: Scale[] = [
     notes: '9. madde (kendine zarar verme düşüncesi) 1 ve üzeriyse mutlaka intihar riski değerlendirmesi yapın.',
     publicDomain: true,
     responseAnchors: '0=Hiç · 1=Birkaç gün · 2=Günlerin yarısından fazlası · 3=Hemen her gün',
+    responseOptions: [
+      { value: 0, label: 'Hiç' },
+      { value: 1, label: 'Birkaç gün' },
+      { value: 2, label: 'Yarısından fazlası' },
+      { value: 3, label: 'Hemen her gün' },
+    ],
     items: [
       'Yaptığınız işlerden çok az zevk alma ya da ilgi duymama',
       'Kendini çökkün, depresif ya da umutsuz hissetme',
@@ -87,6 +101,12 @@ export const SCALES: Scale[] = [
     notes: 'Panik bozukluğu, sosyal anksiyete ve TSSB taramasında da makul duyarlılık gösterir.',
     publicDomain: true,
     responseAnchors: '0=Hiç · 1=Birkaç gün · 2=Günlerin yarısından fazlası · 3=Hemen her gün',
+    responseOptions: [
+      { value: 0, label: 'Hiç' },
+      { value: 1, label: 'Birkaç gün' },
+      { value: 2, label: 'Yarısından fazlası' },
+      { value: 3, label: 'Hemen her gün' },
+    ],
     items: [
       'Sinirli, kaygılı ya da gergin hissetme',
       'Endişelenmeyi durduramama ya da kontrol edememe',
@@ -115,6 +135,15 @@ export const SCALES: Scale[] = [
     notes: '≤50 puanda depresyon açısından ayrıntılı değerlendirme (örn. PHQ-9) önerilir. Puan DÜŞÜKKEN kötü olan tek gömülü ölçek budur; grafiklerde yorumlarken dikkat.',
     publicDomain: true,
     responseAnchors: '5=Her zaman · 4=Çoğu zaman · 3=Yarısından fazla · 2=Yarısından az · 1=Bazen · 0=Hiçbir zaman',
+    scoreMultiplier: 4,
+    responseOptions: [
+      { value: 0, label: 'Hiçbir zaman' },
+      { value: 1, label: 'Bazen' },
+      { value: 2, label: 'Yarısından az' },
+      { value: 3, label: 'Yarısından fazla' },
+      { value: 4, label: 'Çoğu zaman' },
+      { value: 5, label: 'Her zaman' },
+    ],
     items: [
       'Kendimi neşeli ve keyifli hissettim',
       'Kendimi sakin ve rahatlamış hissettim',
@@ -273,4 +302,14 @@ export const SCALES: Scale[] = [
 
 export function getScale(id: string): Scale | undefined {
   return SCALES.find(s => s.id === id);
+}
+
+/** Ham madde toplamını nihai puana çevirir ve ilgili şiddet bandını bulur. */
+export function interpretScore(scale: Scale, rawSum: number): { score: number; band: ScaleCutoff | null } {
+  const score = rawSum * (scale.scoreMultiplier ?? 1);
+  const band = scale.cutoffs.find(c => {
+    const m = c.range.match(/^(\d+)-(\d+)$/);
+    return m ? score >= +m[1] && score <= +m[2] : false;
+  }) ?? null;
+  return { score, band };
 }
