@@ -5,29 +5,32 @@ import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { RISK_LEVELS, RISK_CATEGORIES, RISK_LEVEL_ORDER } from '@/components/RiskBadge';
 import { Icon } from '@/components/ui/Icon';
-import type { Session, RiskFlag } from '@/lib/types';
+import type { Session, Appointment, RiskFlag } from '@/lib/types';
 import type { ComponentProps } from 'react';
 
 type IconName = ComponentProps<typeof Icon>['name'];
+type UpcomingAppointment = Appointment & { patient_name: string };
 
 interface TodaySession extends Session {
   patient_name: string;
 }
 
 export default function Dashboard() {
-  const { getTodaySessions, patients, getStats, settings, getActiveRiskFlags } = useDatabase();
+  const { getTodaySessions, getUpcomingAppointments, patients, getStats, settings, getActiveRiskFlags } = useDatabase();
   const router = useRouter();
   const [todaySessions, setTodaySessions] = useState<TodaySession[]>([]);
+  const [upcoming, setUpcoming] = useState<UpcomingAppointment[]>([]);
   const [activeRisks, setActiveRisks] = useState<(RiskFlag & { patient_name: string })[]>([]);
-  const [stats, setStats] = useState({ totalPatients: 0, monthSessions: 0, activeDiagnoses: 0, activeRisks: 0 });
+  const [stats, setStats] = useState({ totalPatients: 0, monthSessions: 0, activeDiagnoses: 0, activeRisks: 0, upcomingAppointments: 0 });
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [sessions, s, risks] = await Promise.all([getTodaySessions(), getStats(), getActiveRiskFlags()]);
+    const [sessions, appts, s, risks] = await Promise.all([getTodaySessions(), getUpcomingAppointments(), getStats(), getActiveRiskFlags()]);
     setTodaySessions(sessions);
+    setUpcoming(appts);
     setStats(s);
     setActiveRisks([...risks].sort((a, b) => RISK_LEVEL_ORDER[b.level] - RISK_LEVEL_ORDER[a.level]));
-  }, [getTodaySessions, getStats, getActiveRiskFlags]);
+  }, [getTodaySessions, getUpcomingAppointments, getStats, getActiveRiskFlags]);
 
   // Sekmeye her dönüşte verileri yenile
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -70,8 +73,8 @@ export default function Dashboard() {
       </View>
 
       <View style={styles.statsRow}>
-        <StatCard label="Danışan" value={stats.totalPatients} iconName="people-outline" />
-        <StatCard label="Bu Ay Seans" value={stats.monthSessions} iconName="calendar-outline" />
+        <StatCard label="Danışan" value={stats.totalPatients} iconName="people-outline" onPress={() => router.push('/(tabs)/patients')} />
+        <StatCard label="Randevu" value={stats.upcomingAppointments} iconName="calendar-outline" onPress={() => router.push('/(tabs)/schedule')} />
         {stats.activeRisks > 0 && <StatCard label="Risk" value={stats.activeRisks} iconName="warning-outline" alert />}
       </View>
 
@@ -100,33 +103,63 @@ export default function Dashboard() {
         </>
       )}
 
-      <SectionHeader title="Bugünün Seansları" />
-      {todaySessions.length === 0 ? (
+      <SectionHeader title="Yaklaşan Randevular" onPress={() => router.push('/(tabs)/schedule')} />
+      {upcoming.length === 0 ? (
         <EmptyCard
-          message="Bugün için randevu yok"
+          message="Yaklaşan randevu yok"
           ctaLabel="Randevu Ekle →"
           onCtaPress={() => router.push('/(tabs)/schedule')}
         />
       ) : (
-        todaySessions.map(session => (
-          <TouchableOpacity
-            key={session.id}
-            style={styles.sessionCard}
-            onPress={() => router.push(`/patient/${session.patient_id}/session/${session.id}`)}
-          >
-            <View style={styles.timeTag}>
-              <Text style={styles.timeText}>{formatTime(session.date)}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.patientName}>{session.patient_name}</Text>
-              <Text style={styles.sessionMeta}>Seans #{session.session_number || '-'} · {session.duration || '?'} dk</Text>
-            </View>
-            <StatusBadge status={session.status} />
-          </TouchableOpacity>
-        ))
+        <>
+          {upcoming.slice(0, 3).map(a => (
+            <TouchableOpacity key={a.id} style={styles.sessionCard} onPress={() => router.push('/(tabs)/schedule')}>
+              <View style={styles.timeTag}>
+                <Text style={styles.timeText}>
+                  {new Date(a.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                </Text>
+                <Text style={styles.timeText}>{formatTime(a.date)}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.patientName}>{a.patient_name}</Text>
+                  {a.recurrence_id ? <Text style={{ fontSize: 11 }}>🔁</Text> : null}
+                </View>
+                <Text style={styles.sessionMeta}>{a.duration} dk{a.notes ? ` · ${a.notes}` : ''}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+          {upcoming.length > 3 && (
+            <TouchableOpacity onPress={() => router.push('/(tabs)/schedule')}>
+              <Text style={styles.moreRiskText}>+ {upcoming.length - 3} randevu daha →</Text>
+            </TouchableOpacity>
+          )}
+        </>
       )}
 
-      <SectionHeader title="Danışanlarım" />
+      {todaySessions.length > 0 && (
+        <>
+          <SectionHeader title="Bugünün Seansları" />
+          {todaySessions.map(session => (
+            <TouchableOpacity
+              key={session.id}
+              style={styles.sessionCard}
+              onPress={() => router.push(`/patient/${session.patient_id}/session/${session.id}`)}
+            >
+              <View style={styles.timeTag}>
+                <Text style={styles.timeText}>{formatTime(session.date)}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.patientName}>{session.patient_name}</Text>
+                <Text style={styles.sessionMeta}>Seans #{session.session_number || '-'} · {session.duration || '?'} dk</Text>
+              </View>
+              <StatusBadge status={session.status} />
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
+
+      <SectionHeader title="Danışanlarım" onPress={() => router.push('/(tabs)/patients')} />
       {patients.length === 0 ? (
         <EmptyCard
           message="Henüz danışan eklenmemiş"
@@ -161,18 +194,30 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value, iconName, alert }: { label: string; value: number; iconName: IconName; alert?: boolean }) {
+function StatCard({ label, value, iconName, alert, onPress }: { label: string; value: number; iconName: IconName; alert?: boolean; onPress?: () => void }) {
   return (
-    <View style={[styles.statCard, alert && { borderColor: colors.error + '60' }]}>
+    <TouchableOpacity
+      style={[styles.statCard, alert && { borderColor: colors.error + '60' }]}
+      onPress={onPress}
+      disabled={!onPress}
+      activeOpacity={0.7}
+    >
       <Icon name={iconName} size={18} color={alert ? colors.error : colors.accent} />
       <Text style={[styles.statValue, alert && { color: colors.error }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
-function SectionHeader({ title }: { title: string }) {
-  return <Text style={styles.sectionHeader}>{title}</Text>;
+// onPress verilirse başlık ilgili sekmeye götürür (sağda › ipucu gösterilir)
+function SectionHeader({ title, onPress }: { title: string; onPress?: () => void }) {
+  if (!onPress) return <Text style={styles.sectionHeader}>{title}</Text>;
+  return (
+    <TouchableOpacity style={styles.sectionHeaderRow} onPress={onPress}>
+      <Text style={styles.sectionHeader}>{title}</Text>
+      <Icon name="chevron-forward" size={14} color={colors.textMuted} />
+    </TouchableOpacity>
+  );
 }
 
 function EmptyCard({ message, ctaLabel, onCtaPress }: { message: string; ctaLabel?: string; onCtaPress?: () => void }) {
@@ -214,6 +259,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 24, fontWeight: '700', color: colors.text },
   statLabel: { ...typography.small, textAlign: 'center', fontSize: 11 },
   sectionHeader: { ...typography.label, marginBottom: spacing.sm, marginTop: spacing.md },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sessionCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder },
   timeTag: { backgroundColor: colors.accentDim, borderRadius: radius.sm, padding: spacing.xs, minWidth: 52, alignItems: 'center' },
   timeText: { color: colors.accentLight, fontSize: 12, fontWeight: '600' },

@@ -108,7 +108,7 @@ interface DatabaseContextType {
   loadSettings: () => Promise<void>;
 
   // Stats
-  getStats: () => Promise<{ totalPatients: number; monthSessions: number; activeDiagnoses: number; activeRisks: number }>;
+  getStats: () => Promise<{ totalPatients: number; monthSessions: number; activeDiagnoses: number; activeRisks: number; upcomingAppointments: number }>;
 }
 
 const DatabaseContext = createContext<DatabaseContextType | null>(null);
@@ -651,7 +651,12 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     ))?.count ?? 0;
     const activeDiagnoses = (await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM diagnoses'))?.count ?? 0;
     const activeRisks = (await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM risk_flags WHERE resolved=0'))?.count ?? 0;
-    return { totalPatients, monthSessions, activeDiagnoses, activeRisks };
+    // Aktif (planlanmış ve geçmemiş) randevu sayısı — takvimdeki "yaklaşan" tanımıyla aynı
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+    const upcomingAppointments = (await db.getFirstAsync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM appointments WHERE date >= ? AND status='scheduled'", [startOfToday.toISOString()]
+    ))?.count ?? 0;
+    return { totalPatients, monthSessions, activeDiagnoses, activeRisks, upcomingAppointments };
   }, []);
 
   return (
