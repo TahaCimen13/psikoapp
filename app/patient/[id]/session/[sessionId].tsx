@@ -1,12 +1,16 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { generateSessionSummary } from '@/lib/claude';
 import { colors, spacing, radius, typography } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
-import type { Session, SessionNote, SoapSectionValue, LegacyNoteCategory } from '@/lib/types';
+import type { Session, SessionNote, SessionNoteVersion, SoapSectionValue, LegacyNoteCategory } from '@/lib/types';
 import { SOAP_SECTIONS, LEGACY_CATEGORY_TO_SOAP, LEGACY_NOTE_LABELS } from '@/lib/types';
+
+// Kategori etiketi: SOAP bölümü veya eski kategori adı (denetim izinde kullanılır)
+const categoryLabel = (cat: SessionNote['category']): string =>
+  SOAP_SECTIONS.find(s => s.value === cat)?.label ?? LEGACY_NOTE_LABELS[cat as LegacyNoteCategory] ?? cat;
 
 // Bir notun ait olduğu SOAP bölümü: yeni notlar doğrudan SOAP değeri taşır,
 // eski kategorili notlar eşleme tablosuyla ilgili bölümde gösterilir.
@@ -16,10 +20,12 @@ const soapOf = (n: SessionNote): SoapSectionValue =>
 export default function SessionDetail() {
   const { id, sessionId } = useLocalSearchParams<{ id: string; sessionId: string }>();
   const router = useRouter();
-  const { getSession, getNotesBySession, addNote, updateNote, deleteNote, updateSession, deleteSession, getPatient, settings, getActiveConsent } = useDatabase();
+  const { getSession, getNotesBySession, addNote, updateNote, deleteNote, getNoteVersionsBySession, updateSession, deleteSession, getPatient, settings, getActiveConsent } = useDatabase();
 
   const [session, setSession] = useState<Session | null>(null);
   const [notes, setNotes] = useState<SessionNote[]>([]);
+  const [versions, setVersions] = useState<SessionNoteVersion[]>([]);
+  const [showAudit, setShowAudit] = useState(false);
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [newNoteCategory, setNewNoteCategory] = useState<SoapSectionValue>('subjektif');
   const [newNoteContent, setNewNoteContent] = useState('');
@@ -29,11 +35,12 @@ export default function SessionDetail() {
   const [aiLoading, setAiLoading] = useState(false);
 
   const load = useCallback(async () => {
-    const [s, n] = await Promise.all([getSession(sessionId), getNotesBySession(sessionId)]);
+    const [s, n, v] = await Promise.all([getSession(sessionId), getNotesBySession(sessionId), getNoteVersionsBySession(sessionId)]);
     setSession(s);
     setNotes(n);
+    setVersions(v);
     if (s) setSummaryEdit(s.summary || '');
-  }, [sessionId, getSession, getNotesBySession]);
+  }, [sessionId, getSession, getNotesBySession, getNoteVersionsBySession]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -238,6 +245,13 @@ export default function SessionDetail() {
           </View>
         ))}
 
+        {versions.length > 0 && (
+          <TouchableOpacity style={styles.auditLink} onPress={() => setShowAudit(true)}>
+            <Icon name="time-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.auditLinkText}>Denetim izi ({versions.length} kayıt)</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.addNoteBox}>
           <Text style={styles.addNoteTitle}>Not Ekle</Text>
           <View style={styles.categoryChips}>
@@ -267,6 +281,40 @@ export default function SessionDetail() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Denetim izi: notların düzenleme/silme öncesi eski halleri (salt okunur) */}
+      <Modal visible={showAudit} transparent animationType="slide" onRequestClose={() => setShowAudit(false)}>
+        <View style={styles.auditOverlay}>
+          <View style={styles.auditModal}>
+            <View style={styles.auditHeader}>
+              <Text style={styles.auditTitle}>Denetim İzi</Text>
+              <TouchableOpacity onPress={() => setShowAudit(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Icon name="close" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.auditInfo}>
+              Notların değişiklik öncesi halleri. Bu kayıtlar klinik kayıt bütünlüğü için tutulur ve silinemez.
+            </Text>
+            <ScrollView style={{ maxHeight: 420 }}>
+              {versions.map(v => (
+                <View key={v.id} style={styles.auditCard}>
+                  <View style={styles.auditMetaRow}>
+                    <View style={[styles.auditBadge, v.action === 'silindi' ? styles.auditBadgeDeleted : styles.auditBadgeEdited]}>
+                      <Text style={[styles.auditBadgeText, { color: v.action === 'silindi' ? colors.error : colors.accent }]}>
+                        {v.action === 'silindi' ? 'Silindi' : 'Düzenlendi'}
+                      </Text>
+                    </View>
+                    <Text style={styles.auditMeta}>
+                      {categoryLabel(v.category)} · {new Date(v.archived_at).toLocaleString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                  <Text style={styles.auditContent}>{v.content}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -312,6 +360,21 @@ const styles = StyleSheet.create({
   noteActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md, marginTop: spacing.xs },
   cancelBtn: { color: colors.textSecondary, fontSize: 13 },
   saveNoteBtn: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  auditLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: spacing.xs },
+  auditLinkText: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  auditOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  auditModal: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg, maxHeight: '85%' },
+  auditHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  auditTitle: { ...typography.h3 },
+  auditInfo: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginBottom: spacing.md },
+  auditCard: { backgroundColor: colors.background, borderRadius: radius.sm, padding: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.xs },
+  auditMetaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 6 },
+  auditBadge: { borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
+  auditBadgeEdited: { backgroundColor: colors.accentDim },
+  auditBadgeDeleted: { backgroundColor: colors.error + '18' },
+  auditBadgeText: { fontSize: 11, fontWeight: '700' },
+  auditMeta: { color: colors.textMuted, fontSize: 11, flex: 1 },
+  auditContent: { color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
   addNoteBox: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md, borderWidth: 1, borderColor: colors.cardBorder },
   addNoteTitle: { ...typography.label, marginBottom: spacing.sm },
   categoryChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, paddingBottom: spacing.sm },

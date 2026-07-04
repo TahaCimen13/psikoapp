@@ -52,6 +52,18 @@ export interface SessionNote {
   created_at: string;
 }
 
+// Denetim izi: bir not her düzenlendiğinde/silindiğinde eski hali arşivlenir.
+// Kayıtlar uygulama içinden silinemez (klinik kayıt bütünlüğü + KVKK denetimi).
+export interface SessionNoteVersion {
+  id: string;
+  note_id: string;
+  session_id: string;
+  category: SessionNote['category'];
+  content: string;                    // değişiklik ÖNCESİ içerik
+  action: 'guncellendi' | 'silindi';
+  archived_at: string;
+}
+
 export interface Diagnosis {
   id: string;
   patient_id: string;

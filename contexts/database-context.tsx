@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { getDb } from '@/lib/database';
 import { generateId, now } from '@/lib/id';
 import type {
-  Patient, Appointment, Session, SessionNote, Diagnosis, Assessment,
+  Patient, Appointment, Session, SessionNote, SessionNoteVersion, Diagnosis, Assessment,
   Homework, TreatmentPlan, RiskFlag, Book, BookAnnotation, ChatMessage, AppSettings, KvkkConsent,
   AnamnesisForm, AnamnesisResponse,
 } from '@/lib/types';
@@ -38,6 +38,7 @@ interface DatabaseContextType {
   addNote: (data: Omit<SessionNote, 'id' | 'created_at'>) => Promise<SessionNote>;
   updateNote: (id: string, content: string) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
+  getNoteVersionsBySession: (sessionId: string) => Promise<SessionNoteVersion[]>;
 
   // Diagnoses
   getDiagnosesByPatient: (patientId: string) => Promise<Diagnosis[]>;
@@ -286,12 +287,32 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     return n;
   }, []);
 
-  const updateNote = useCallback(async (id: string, content: string) => {
-    await getDb().runAsync('UPDATE session_notes SET content=? WHERE id=?', [content, id]);
+  // Denetim izi: değişiklik/silme öncesi eski içerik arşivlenir, arşiv silinemez
+  const archiveNoteVersion = useCallback(async (noteId: string, action: 'guncellendi' | 'silindi') => {
+    const db = getDb();
+    const old = await db.getFirstAsync<SessionNote>('SELECT * FROM session_notes WHERE id=?', [noteId]);
+    if (!old) return;
+    await db.runAsync(
+      'INSERT INTO session_note_versions (id, note_id, session_id, category, content, action, archived_at) VALUES (?,?,?,?,?,?,?)',
+      [generateId(), old.id, old.session_id, old.category, old.content, action, now()]
+    );
   }, []);
 
+  const updateNote = useCallback(async (id: string, content: string) => {
+    await archiveNoteVersion(id, 'guncellendi');
+    await getDb().runAsync('UPDATE session_notes SET content=? WHERE id=?', [content, id]);
+  }, [archiveNoteVersion]);
+
   const deleteNote = useCallback(async (id: string) => {
+    await archiveNoteVersion(id, 'silindi');
     await getDb().runAsync('DELETE FROM session_notes WHERE id=?', [id]);
+  }, [archiveNoteVersion]);
+
+  const getNoteVersionsBySession = useCallback(async (sessionId: string): Promise<SessionNoteVersion[]> => {
+    return getDb().getAllAsync<SessionNoteVersion>(
+      'SELECT * FROM session_note_versions WHERE session_id=? ORDER BY archived_at DESC',
+      [sessionId]
+    );
   }, []);
 
   // --- Diagnoses ---
@@ -603,7 +624,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       patients, loadPatients, addPatient, updatePatient, deletePatient, getPatient,
       getAppointmentsByPatient, getUpcomingAppointments, getAppointmentsByRange, addAppointment, updateAppointment, deleteAppointment,
       getSessionsByPatient, getTodaySessions, addSession, updateSession, deleteSession, getSession,
-      getNotesBySession, addNote, updateNote, deleteNote,
+      getNotesBySession, addNote, updateNote, deleteNote, getNoteVersionsBySession,
       getDiagnosesByPatient, addDiagnosis, deleteDiagnosis,
       getAssessmentsByPatient, addAssessment, deleteAssessment,
       getHomeworkByPatient, addHomework, updateHomework, deleteHomework,

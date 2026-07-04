@@ -62,6 +62,16 @@ export async function initDatabase(): Promise<void> {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS session_note_versions (
+      id TEXT PRIMARY KEY,
+      note_id TEXT NOT NULL,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      category TEXT NOT NULL,
+      content TEXT NOT NULL,
+      action TEXT NOT NULL,
+      archived_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS diagnoses (
       id TEXT PRIMARY KEY,
       patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
@@ -216,6 +226,7 @@ export async function wipeAllData(): Promise<void> {
     DELETE FROM homework;
     DELETE FROM assessments;
     DELETE FROM diagnoses;
+    DELETE FROM session_note_versions;
     DELETE FROM session_notes;
     DELETE FROM sessions;
     DELETE FROM appointments;
