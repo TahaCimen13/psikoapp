@@ -10,6 +10,8 @@ export default function Settings() {
   const { settings, updateSettings } = useDatabase();
   const { hasPIN, setupPIN, removePIN, autoLockMinutes, setAutoLockMinutes } = useAuth();
   const [apiKey, setApiKey] = useState('');
+  const [geminiKey, setGeminiKey] = useState('');
+  const [aiProvider, setAiProvider] = useState<'claude' | 'gemini'>('claude');
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
   const [saving, setSaving] = useState(false);
@@ -22,6 +24,8 @@ export default function Settings() {
 
   useEffect(() => {
     setApiKey(settings.claude_api_key || '');
+    setGeminiKey(settings.gemini_api_key || '');
+    setAiProvider(settings.ai_provider === 'gemini' ? 'gemini' : 'claude');
     setName(settings.psychologist_name || '');
     setTitle(settings.psychologist_title || '');
   }, [settings]);
@@ -33,7 +37,9 @@ export default function Settings() {
   const save = async () => {
     setSaving(true);
     await updateSettings({
+      ai_provider: aiProvider,
       claude_api_key: apiKey.trim() || undefined,
+      gemini_api_key: geminiKey.trim() || undefined,
       psychologist_name: name.trim() || undefined,
       psychologist_title: title.trim() || undefined,
     });
@@ -172,23 +178,68 @@ export default function Settings() {
 
       <SectionLabel label="AI Asistan" />
 
-      <View style={styles.infoBox}>
-        <Text style={styles.infoText}>Claude API anahtarınızı Anthropic Console'dan alabilirsiniz. Anahtar yalnızca cihazınızda saklanır, hiçbir yere gönderilmez.</Text>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>AI Sağlayıcı</Text>
+        <View style={styles.providerRow}>
+          <TouchableOpacity
+            style={[styles.providerBtn, aiProvider === 'claude' && styles.providerBtnActive]}
+            onPress={() => setAiProvider('claude')}
+          >
+            <Text style={[styles.providerText, aiProvider === 'claude' && styles.providerTextActive]}>Claude</Text>
+            <Text style={styles.providerSub}>Önerilen · ücretli</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.providerBtn, aiProvider === 'gemini' && styles.providerBtnActive]}
+            onPress={() => setAiProvider('gemini')}
+          >
+            <Text style={[styles.providerText, aiProvider === 'gemini' && styles.providerTextActive]}>Gemini</Text>
+            <Text style={styles.providerSub}>Test için · ücretsiz</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Claude API Anahtarı</Text>
-        <TextInput
-          style={styles.input}
-          value={apiKey}
-          onChangeText={setApiKey}
-          placeholder="sk-ant-..."
-          placeholderTextColor={colors.placeholder}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </View>
+      {aiProvider === 'claude' ? (
+        <>
+          <View style={styles.infoBox}>
+            <Text style={styles.infoText}>Claude API anahtarınızı Anthropic Console'dan alabilirsiniz. Anahtar yalnızca cihazınızda saklanır, hiçbir yere gönderilmez.</Text>
+          </View>
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>Claude API Anahtarı</Text>
+            <TextInput
+              style={styles.input}
+              value={apiKey}
+              onChangeText={setApiKey}
+              placeholder="sk-ant-..."
+              placeholderTextColor={colors.placeholder}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={styles.infoBox}>
+            <Text style={styles.infoText}>Ücretsiz anahtar: aistudio.google.com/apikey adresinden Google hesabıyla alınır, kart gerekmez.</Text>
+          </View>
+          <View style={styles.warnBox}>
+            <Text style={styles.warnText}>⚠️ Gemini'nin ücretsiz katmanında Google, gönderilen içeriği ürünlerini geliştirmek için kullanabilir. Yalnızca TEST verisiyle kullanın; gerçek danışan verisi için Claude'a geçin.</Text>
+          </View>
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>Gemini API Anahtarı</Text>
+            <TextInput
+              style={styles.input}
+              value={geminiKey}
+              onChangeText={setGeminiKey}
+              placeholder="AIza..."
+              placeholderTextColor={colors.placeholder}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        </>
+      )}
 
       <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }]} onPress={save} disabled={saving}>
         <Text style={styles.saveBtnText}>{saving ? 'Kaydediliyor...' : 'Kaydet'}</Text>
@@ -238,6 +289,14 @@ const styles = StyleSheet.create({
   pinSaveBtnText: { color: '#fff', fontWeight: '700' },
   infoBox: { backgroundColor: colors.accentDim, borderRadius: radius.sm, padding: spacing.sm, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.accent + '44' },
   infoText: { color: colors.accentLight, fontSize: 13, lineHeight: 20 },
+  warnBox: { backgroundColor: colors.warning + '15', borderRadius: radius.sm, padding: spacing.sm, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.warning + '50' },
+  warnText: { color: colors.warning, fontSize: 13, lineHeight: 20 },
+  providerRow: { flexDirection: 'row', gap: spacing.sm },
+  providerBtn: { flex: 1, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center', backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.cardBorder },
+  providerBtnActive: { backgroundColor: colors.accentDim, borderColor: colors.accent },
+  providerText: { color: colors.textSecondary, fontWeight: '600', fontSize: 15 },
+  providerTextActive: { color: colors.accentLight },
+  providerSub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   saveBtn: { backgroundColor: colors.accent, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

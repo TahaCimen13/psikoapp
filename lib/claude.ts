@@ -1,9 +1,25 @@
 import { fetch } from 'expo/fetch';
-import type { Patient, Session, SessionNote, Diagnosis, Assessment } from './types';
+import type { Patient, Session, SessionNote, Diagnosis, Assessment, AppSettings } from './types';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-5';
 const MAX_TOKENS = 2048;
+
+// Gemini: test için ücretsiz katman (aistudio.google.com/apikey).
+// DİKKAT: Ücretsiz katmanda Google girdileri ürün iyileştirmede kullanabilir;
+// gerçek danışan verisiyle değil, yalnızca test verisiyle kullanılmalıdır.
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+export type AIProvider = 'claude' | 'gemini';
+export interface AIConfig { provider: AIProvider; apiKey: string; }
+
+/** Ayarlardan aktif AI yapılandırmasını çıkarır; anahtar yoksa null. */
+export function getAIConfig(settings: AppSettings): AIConfig | null {
+  const provider: AIProvider = settings.ai_provider === 'gemini' ? 'gemini' : 'claude';
+  const apiKey = provider === 'gemini' ? settings.gemini_api_key : settings.claude_api_key;
+  return apiKey ? { provider, apiKey } : null;
+}
 
 const BASE_SYSTEM = `Sen deneyimli bir klinik psikolog asistanısın. Türkçe konuşuyorsun.
 
@@ -100,12 +116,14 @@ function requestHeaders(apiKey: string) {
   };
 }
 
-async function createMessage(apiKey: string, system: string, messages: ChatTurn[]): Promise<string> {
+async function createMessage(ai: AIConfig, system: string, messages: ChatTurn[]): Promise<string> {
+  if (ai.provider === 'gemini') return createGemini(ai.apiKey, system, messages);
+
   let response: Awaited<ReturnType<typeof fetch>>;
   try {
     response = await fetch(API_URL, {
       method: 'POST',
-      headers: requestHeaders(apiKey),
+      headers: requestHeaders(ai.apiKey),
       body: requestBody(system, messages, false),
     });
   } catch {
@@ -121,11 +139,38 @@ async function createMessage(apiKey: string, system: string, messages: ChatTurn[
   return block?.type === 'text' ? block.text : '';
 }
 
-/**
- * SSE streaming ile mesaj oluşturur. Her metin parçası geldiğinde
- * onChunk çağrılır; tamamlanan metnin tamamı döndürülür.
- */
-async function streamMessage(
+// ---- Gemini API (ücretsiz test katmanı) ----
+
+function geminiBody(system: string, messages: ChatTurn[]) {
+  return JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: messages.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    })),
+    generationConfig: { maxOutputTokens: MAX_TOKENS },
+  });
+}
+
+async function createGemini(apiKey: string, system: string, messages: ChatTurn[]): Promise<string> {
+  let response: Awaited<ReturnType<typeof fetch>>;
+  try {
+    response = await fetch(`${GEMINI_BASE}/${GEMINI_MODEL}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: geminiBody(system, messages),
+    });
+  } catch {
+    throw networkError();
+  }
+  if (!response.ok) throw apiError(response.status);
+
+  const data = await response.json();
+  const parts: { text?: string }[] = data.candidates?.[0]?.content?.parts ?? [];
+  return parts.map(p => p.text ?? '').join('');
+}
+
+async function streamGemini(
   apiKey: string,
   system: string,
   messages: ChatTurn[],
@@ -133,9 +178,79 @@ async function streamMessage(
 ): Promise<string> {
   let response: Awaited<ReturnType<typeof fetch>>;
   try {
+    response = await fetch(`${GEMINI_BASE}/${GEMINI_MODEL}:streamGenerateContent?alt=sse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: geminiBody(system, messages),
+    });
+  } catch {
+    throw networkError();
+  }
+  if (!response.ok) throw apiError(response.status);
+
+  const body = response.body;
+  if (!body) throw new Error('Akış başlatılamadı. Lütfen tekrar deneyin.');
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+
+        let event: any;
+        try {
+          event = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+        const parts: { text?: string }[] = event.candidates?.[0]?.content?.parts ?? [];
+        const text = parts.map(p => p.text ?? '').join('');
+        if (text) {
+          fullText += text;
+          onChunk(text);
+        }
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {}
+  }
+
+  return fullText;
+}
+
+/**
+ * SSE streaming ile mesaj oluşturur. Her metin parçası geldiğinde
+ * onChunk çağrılır; tamamlanan metnin tamamı döndürülür.
+ */
+async function streamMessage(
+  ai: AIConfig,
+  system: string,
+  messages: ChatTurn[],
+  onChunk: (chunk: string) => void
+): Promise<string> {
+  if (ai.provider === 'gemini') return streamGemini(ai.apiKey, system, messages, onChunk);
+
+  let response: Awaited<ReturnType<typeof fetch>>;
+  try {
     response = await fetch(API_URL, {
       method: 'POST',
-      headers: requestHeaders(apiKey),
+      headers: requestHeaders(ai.apiKey),
       body: requestBody(system, messages, true),
     });
   } catch {
@@ -203,8 +318,8 @@ async function streamMessage(
   return fullText;
 }
 
-async function callClaude(apiKey: string, system: string, userMessage: string): Promise<string> {
-  return createMessage(apiKey, system, [{ role: 'user', content: userMessage }]);
+async function callAI(ai: AIConfig, system: string, userMessage: string): Promise<string> {
+  return createMessage(ai, system, [{ role: 'user', content: userMessage }]);
 }
 
 // ---- Genel AI sohbeti ----
@@ -214,7 +329,7 @@ async function callClaude(apiKey: string, system: string, userMessage: string): 
  * parça parça iletilir; her durumda tam yanıt metni döndürülür.
  */
 export async function sendMessage(
-  apiKey: string,
+  ai: AIConfig,
   messages: ChatTurn[],
   patientContext?: { patient: Patient; diagnoses: Diagnosis[] },
   onChunk?: (chunk: string) => void
@@ -225,15 +340,15 @@ export async function sendMessage(
   }
 
   if (onChunk) {
-    return streamMessage(apiKey, system, messages, onChunk);
+    return streamMessage(ai, system, messages, onChunk);
   }
-  return createMessage(apiKey, system, messages);
+  return createMessage(ai, system, messages);
 }
 
 // ---- Seans özeti oluştur ----
 
 export async function generateSessionSummary(
-  apiKey: string,
+  ai: AIConfig,
   patient: Patient,
   session: Session,
   notes: SessionNote[]
@@ -242,13 +357,13 @@ export async function generateSessionSummary(
   const system = `${BASE_SYSTEM}\n\nGörevin: Seans notlarından SOAP formatında kısa, yapılandırılmış bir klinik özet çıkarmak. Format:\nS (Subjektif): danışanın kendi ifadeleri ve şikayetleri\nO (Objektif): terapistin gözlemleri, davranış ve duygulanım\nA (Değerlendirme): klinik yorum, ilerleme, risk\nP (Plan): müdahaleler, ödevler, sonraki adımlar\nNot etiketleri subjektif/objektif/degerlendirme/plan doğrudan ilgili bölüme aittir; eski etiketler şöyle eşlenir: genel, davranis → O; duygu, bilis → S; risk → A; mudahale, hedef → P.`;
   const prompt = `Danışan: ${anonymizePatientName(patient.name)}, Yaklaşım: ${session.approach || 'belirtilmemiş'}, Süre: ${session.duration || '?'} dk\n\nSeans Notları:\n${noteText || 'Not girilmemiş.'}`;
 
-  return callClaude(apiKey, system, prompt);
+  return callAI(ai, system, prompt);
 }
 
 // ---- Vaka formülasyonu oluştur ----
 
 export async function generateCaseFormulation(
-  apiKey: string,
+  ai: AIConfig,
   patient: Patient,
   diagnoses: Diagnosis[],
   sessions: Session[],
@@ -258,13 +373,13 @@ export async function generateCaseFormulation(
   const assessText = assessments.map(a => `${a.test_name}: ${a.score ?? 'puan yok'} (${a.interpretation || '-'})`).join('\n');
   const prompt = `${buildPatientContext(patient, diagnoses)}\n\nToplam Seans: ${sessions.length}\nDeğerlendirmeler:\n${assessText || 'Değerlendirme yapılmamış.'}`;
 
-  return callClaude(apiKey, system, prompt);
+  return callAI(ai, system, prompt);
 }
 
 // ---- Müdahale önerileri ----
 
 export async function suggestInterventions(
-  apiKey: string,
+  ai: AIConfig,
   patient: Patient,
   diagnoses: Diagnosis[],
   approach?: string
@@ -272,13 +387,13 @@ export async function suggestInterventions(
   const system = `${BASE_SYSTEM}\n\nGörevin: Tanı ve terapi yaklaşımına göre kanıt temelli müdahale teknikleri önermek. Her teknik için kısa uygulama notu ekle.`;
   const prompt = `${buildPatientContext(patient, diagnoses)}\nTerapi Yaklaşımı: ${approach || 'belirtilmemiş'}\n\nBu hasta için uygulanabilir 4-6 müdahale tekniği öner.`;
 
-  return callClaude(apiKey, system, prompt);
+  return callAI(ai, system, prompt);
 }
 
 // ---- Risk göstergesi tespiti ----
 
 export async function detectRiskIndicators(
-  apiKey: string,
+  ai: AIConfig,
   notes: SessionNote[]
 ): Promise<{ hasRisk: boolean; level: string; summary: string }> {
   const noteText = notes.map(n => n.content).join('\n');
@@ -287,7 +402,7 @@ export async function detectRiskIndicators(
   const system = `Sen bir klinik risk değerlendirme asistanısın. Seans notlarını analiz ederek intihar riski, kendine zarar verme, başkasına zarar verme veya kriz belirtileri olup olmadığını değerlendiriyorsun. Yanıtını JSON formatında ver: {"hasRisk": boolean, "level": "yok|dusuk|orta|yuksek|kritik", "summary": "kısa açıklama"}`;
   const prompt = `Aşağıdaki seans notlarında risk göstergesi var mı?\n\n${noteText}`;
 
-  const raw = await callClaude(apiKey, system, prompt);
+  const raw = await callAI(ai, system, prompt);
   try {
     const match = raw.match(/\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
@@ -298,7 +413,7 @@ export async function detectRiskIndicators(
 // ---- Psikoeğitim metni oluştur ----
 
 export async function generatePsychoeducation(
-  apiKey: string,
+  ai: AIConfig,
   topic: string,
   patient: Patient,
   diagnoses: Diagnosis[]
@@ -306,13 +421,13 @@ export async function generatePsychoeducation(
   const system = `${BASE_SYSTEM}\n\nGörevin: Psikolog tarafından danışana verilecek, anlaşılır ve empatik bir psikoeğitim metni yazmak. Teknik jargondan kaçın, somut örnekler kullan.`;
   const prompt = `${buildPatientContext(patient, diagnoses)}\n\nKonu: "${topic}" hakkında bu hastaya uygun bir psikoeğitim metni yaz. Yaklaşık 200-300 kelime.`;
 
-  return callClaude(apiKey, system, prompt);
+  return callAI(ai, system, prompt);
 }
 
 // ---- Seans hazırlığı ----
 
 export async function prepareSession(
-  apiKey: string,
+  ai: AIConfig,
   patient: Patient,
   diagnoses: Diagnosis[],
   lastSessions: Session[],
@@ -327,5 +442,5 @@ export async function prepareSession(
   const hwText = pendingHomework.length > 0 ? pendingHomework.join(', ') : 'Bekleyen ödev yok';
   const prompt = `${buildPatientContext(patient, diagnoses)}\n\nSon Seanslar:\n${lastSummaries || 'Geçmiş seans yok.'}\n\nBekleyen Ödevler: ${hwText}\n\nBugünkü seans için hazırlık notları yaz.`;
 
-  return callClaude(apiKey, system, prompt);
+  return callAI(ai, system, prompt);
 }

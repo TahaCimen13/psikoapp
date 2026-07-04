@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
-import { generateSessionSummary } from '@/lib/claude';
+import { generateSessionSummary, getAIConfig } from '@/lib/claude';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
 import type { Session, SessionNote, SessionNoteVersion, SoapSectionValue, LegacyNoteCategory } from '@/lib/types';
@@ -81,8 +81,9 @@ export default function SessionDetail() {
   // Seans notlarından AI ile özet üret; kaydetmeden önce düzenleme modunda göster
   const generateAISummary = async () => {
     if (!session || aiLoading) return;
-    if (!settings.claude_api_key) {
-      Alert.alert('API Anahtarı Gerekli', 'AI özet için Ayarlar ekranından Claude API anahtarınızı girin.');
+    const ai = getAIConfig(settings);
+    if (!ai) {
+      Alert.alert('API Anahtarı Gerekli', 'AI özet için Ayarlar ekranından bir API anahtarı girin (test için ücretsiz Gemini kullanılabilir).');
       return;
     }
     // KVKK: rıza yoksa seans notları AI'ya gönderilmez
@@ -99,7 +100,7 @@ export default function SessionDetail() {
     try {
       const patient = await getPatient(id);
       if (!patient) throw new Error('Hasta bulunamadı.');
-      const summary = await generateSessionSummary(settings.claude_api_key, patient, session, notes);
+      const summary = await generateSessionSummary(ai, patient, session, notes);
       setSummaryEdit(summary);
       setEditingSummary(true);
     } catch (e: any) {

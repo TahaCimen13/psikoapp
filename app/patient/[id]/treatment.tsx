@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
-import { generateCaseFormulation, suggestInterventions } from '@/lib/claude';
+import { generateCaseFormulation, suggestInterventions, getAIConfig, type AIConfig } from '@/lib/claude';
 
 const APPROACHES = ['BDT', 'DBT', 'ACT', 'Psikodinamik', 'EMDR', 'Diger'];
 
@@ -40,28 +40,30 @@ export default function TreatmentScreen() {
   };
 
   // KVKK: rıza yoksa danışan verisi AI'ya gönderilmez
-  const checkAIAllowed = async (): Promise<boolean> => {
-    if (!settings.claude_api_key) {
-      Alert.alert('API Anahtarı Eksik', 'Ayarlardan Claude API anahtarı ekleyin.');
-      return false;
+  const checkAIAllowed = async (): Promise<AIConfig | null> => {
+    const ai = getAIConfig(settings);
+    if (!ai) {
+      Alert.alert('API Anahtarı Eksik', 'Ayarlardan bir AI API anahtarı ekleyin (test için ücretsiz Gemini kullanılabilir).');
+      return null;
     }
     const consent = await getActiveConsent(id);
     if (!consent) {
-      Alert.alert('KVKK Rızası Gerekli', 'Bu danışan için aktif KVKK rızası yok. Hasta profilinden rıza kaydı alın.');
-      return false;
+      Alert.alert('KVKK Rızası Gerekli', 'Bu danışan için aktif KVKK rızası yok. Danışan profilinden rıza kaydı alın.');
+      return null;
     }
-    return true;
+    return ai;
   };
 
   const generateFormulation = async () => {
-    if (!(await checkAIAllowed())) return;
+    const ai = await checkAIAllowed();
+    if (!ai) return;
     setGenerating(true);
     try {
       const [patient, diagnoses, sessions, assessments] = await Promise.all([
         getPatient(id), getDiagnosesByPatient(id), getSessionsByPatient(id), getAssessmentsByPatient(id),
       ]);
       if (!patient) return;
-      const result = await generateCaseFormulation(settings.claude_api_key!, patient, diagnoses, sessions, assessments);
+      const result = await generateCaseFormulation(ai, patient, diagnoses, sessions, assessments);
       setGoals(prev => {
         const labeled = '--- 🤖 AI oluşturdu, gözden geçirin ---\n' + result;
         return prev ? prev + '\n\n' + labeled : labeled;
@@ -74,12 +76,13 @@ export default function TreatmentScreen() {
   };
 
   const generateSuggestions = async () => {
-    if (!(await checkAIAllowed())) return;
+    const ai = await checkAIAllowed();
+    if (!ai) return;
     setGenerating(true);
     try {
       const [patient, diagnoses] = await Promise.all([getPatient(id), getDiagnosesByPatient(id)]);
       if (!patient) return;
-      const result = await suggestInterventions(settings.claude_api_key!, patient, diagnoses, approach);
+      const result = await suggestInterventions(ai, patient, diagnoses, approach);
       setInterventions(prev => {
         const labeled = '--- 🤖 AI oluşturdu, gözden geçirin ---\n' + result;
         return prev ? prev + '\n\n' + labeled : labeled;

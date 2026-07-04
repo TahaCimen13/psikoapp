@@ -2,7 +2,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Keyboa
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useDatabase } from '@/contexts/database-context';
-import { sendMessage } from '@/lib/claude';
+import { sendMessage, getAIConfig } from '@/lib/claude';
 import { generateId } from '@/lib/id';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
@@ -20,7 +20,8 @@ export default function AIChat() {
   const [showPatientPicker, setShowPatientPicker] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
-  const hasApiKey = !!settings.claude_api_key;
+  const aiConfig = getAIConfig(settings);
+  const hasApiKey = !!aiConfig;
 
   const send = useCallback(async () => {
     if (!input.trim() || !hasApiKey || loading) return;
@@ -47,7 +48,7 @@ export default function AIChat() {
       }
 
       // Streaming: yanıt geldikçe ekrana yaz
-      const reply = await sendMessage(settings.claude_api_key!, history, patientContext, chunk => {
+      const reply = await sendMessage(aiConfig!, history, patientContext, chunk => {
         setStreamingText(prev => prev + chunk);
       });
       const assistantMsg = await addMessage({
@@ -65,7 +66,7 @@ export default function AIChat() {
     }
 
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [input, hasApiKey, loading, addMessage, conversationId, messages, selectedPatient, settings.claude_api_key]);
+  }, [input, hasApiKey, loading, addMessage, conversationId, messages, selectedPatient, aiConfig]);
 
   // KVKK: rızası olmayan danışanın verisi AI bağlamına eklenemez
   const selectPatient = useCallback(async (p: Patient) => {
@@ -100,7 +101,7 @@ export default function AIChat() {
           <Icon name="key-outline" size={48} color={colors.textMuted} />
         </View>
         <Text style={styles.noKeyTitle}>API Anahtarı Gerekli</Text>
-        <Text style={styles.noKeyDesc}>AI asistanı kullanmak için Ayarlar ekranından Claude API anahtarınızı girin.</Text>
+        <Text style={styles.noKeyDesc}>AI asistanı kullanmak için Ayarlar ekranından bir API anahtarı girin. Test için Gemini'nin ücretsiz katmanını kullanabilirsiniz.</Text>
         <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
           <Text style={styles.settingsBtnText}>Ayarlara Git</Text>
         </TouchableOpacity>

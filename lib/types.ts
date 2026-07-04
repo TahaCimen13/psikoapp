@@ -181,7 +181,9 @@ export interface AnamnesisResponse {
 }
 
 export interface AppSettings {
+  ai_provider?: string;      // 'claude' (varsayılan) | 'gemini' (ücretsiz test katmanı)
   claude_api_key?: string;
+  gemini_api_key?: string;
   psychologist_name?: string;
   psychologist_title?: string;
   pin_enabled?: string;
