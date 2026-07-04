@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'rea
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
-import { colors, spacing, radius, typography } from '@/lib/theme';
+import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
 import type { Patient, AnamnesisForm, AnamnesisResponse } from '@/lib/types';
 
@@ -106,7 +106,7 @@ export default function PatientAnamnesisList() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, paddingTop: spacing.xl + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, paddingTop: safeTop + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
   backRow: { flexDirection: 'row', alignItems: 'center' },
   back: { color: colors.accent, fontSize: 15, fontWeight: '600' },
   title: { flex: 1, ...typography.h3 },

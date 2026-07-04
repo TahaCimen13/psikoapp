@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, Modal, Scro
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
-import { colors, spacing, radius, typography } from '@/lib/theme';
+import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import type { Book, BookAnnotation } from '@/lib/types';
 
 export default function BookReader() {
@@ -171,7 +171,7 @@ export default function BookReader() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, paddingTop: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, paddingTop: safeTop + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
   back: { color: colors.accent, fontSize: 15, fontWeight: '600' },
   title: { flex: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
   actionBtn: { color: colors.accent, fontSize: 14, padding: spacing.xs },

@@ -2,7 +2,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Refres
 import { useRouter } from 'expo-router';
 import { useState, useCallback, useMemo } from 'react';
 import { useDatabase } from '@/contexts/database-context';
-import { colors, spacing, radius, typography } from '@/lib/theme';
+import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
 
 export default function Patients() {
@@ -108,7 +108,7 @@ function genderLabel(g: string) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: spacing.xl + spacing.md },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: safeTop + spacing.sm },
   title: { ...typography.h2 },
   addBtn: { backgroundColor: colors.accent, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2 },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },

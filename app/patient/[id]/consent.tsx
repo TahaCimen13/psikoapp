@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import Constants from 'expo-constants';
 import { useDatabase } from '@/contexts/database-context';
-import { colors, spacing, radius, typography } from '@/lib/theme';
+import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { AYDINLATMA_TEXT, AYDINLATMA_VERSION, RIZA_SENTENCE, RIZA_VERSION, RIZA_REJECT_INFO } from '@/lib/consent';
 import type { Patient, KvkkConsent } from '@/lib/types';
 
@@ -181,7 +181,7 @@ function Header({ title, onBack }: { title: string; onBack: () => void }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.md, paddingTop: spacing.xl + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.md, paddingTop: safeTop + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
   back: { color: colors.accent, fontSize: 15, fontWeight: '600' },
   title: { ...typography.h3 },
   content: { padding: spacing.md },

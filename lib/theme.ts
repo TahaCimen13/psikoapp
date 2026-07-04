@@ -1,3 +1,10 @@
+import { Platform } from 'react-native';
+import { initialWindowMetrics } from 'react-native-safe-area-context';
+
+// Status bar / çentik yüksekliği: ekran başlıkları bunun ALTINDAN başlamalı.
+// Cihazdan okunur; okunamazsa makul varsayılana düşer.
+export const safeTop = initialWindowMetrics?.insets.top ?? (Platform.OS === 'ios' ? 47 : 24);
+
 export const colors = {
   // Sayfa arka planı
   background: '#F8FAFC',

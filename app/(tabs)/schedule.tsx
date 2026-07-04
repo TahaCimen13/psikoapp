@@ -2,7 +2,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, A
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
-import { colors, spacing, radius, typography } from '@/lib/theme';
+import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import AppointmentFormModal, { AppointmentFormData } from '@/components/AppointmentFormModal';
 import { scheduleAppointmentReminder, cancelAppointmentReminder } from '@/lib/notifications';
 import type { Appointment } from '@/lib/types';
@@ -187,7 +187,7 @@ export default function Schedule() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: spacing.xl + spacing.md },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: safeTop + spacing.sm },
   title: { ...typography.h2 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   riskBadge: { backgroundColor: '#fef2f2', borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 4, borderWidth: 1, borderColor: '#fecaca' },

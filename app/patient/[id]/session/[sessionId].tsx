@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { generateSessionSummary } from '@/lib/claude';
-import { colors, spacing, radius, typography } from '@/lib/theme';
+import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
 import type { Session, SessionNote, SessionNoteVersion, SoapSectionValue, LegacyNoteCategory } from '@/lib/types';
 import { SOAP_SECTIONS, LEGACY_CATEGORY_TO_SOAP, LEGACY_NOTE_LABELS } from '@/lib/types';
@@ -326,7 +326,7 @@ function MetaChip({ label }: { label: string }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   loading: { color: colors.textSecondary, textAlign: 'center', marginTop: 60 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: spacing.xl + spacing.md },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: safeTop + spacing.sm },
   backRow: { flexDirection: 'row', alignItems: 'center' },
   back: { color: colors.accent, fontSize: 15, fontWeight: '600' },
   content: { padding: spacing.md, paddingBottom: 40 },

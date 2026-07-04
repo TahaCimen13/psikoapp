@@ -7,13 +7,16 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        // Sabit height verilmez: React Navigation, home indicator (safe area)
+        // payını ancak yüksekliği kendisi hesaplarken ekleyebiliyor.
         tabBarStyle: {
           backgroundColor: colors.card,
           borderTopColor: colors.cardBorder,
           borderTopWidth: 1,
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: 64,
+          paddingTop: 6,
+        },
+        tabBarItemStyle: {
+          paddingBottom: 4,
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useDatabase } from '@/contexts/database-context';
 import { sendMessage } from '@/lib/claude';
 import { generateId } from '@/lib/id';
-import { colors, spacing, radius, typography } from '@/lib/theme';
+import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
 import type { ChatMessage, Patient } from '@/lib/types';
 
@@ -224,7 +224,7 @@ const SUGGESTIONS = [
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: spacing.md, paddingTop: spacing.xl + spacing.md, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: spacing.md, paddingTop: safeTop + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
   title: { ...typography.h2 },
   patientContext: { ...typography.small, color: colors.accent, marginTop: 2 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

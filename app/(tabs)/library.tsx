@@ -5,7 +5,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useDatabase } from '@/contexts/database-context';
 import { copyBookToStorage, deleteBook as deleteBookFile, getFileSize, formatFileSize } from '@/lib/storage';
 import { generateId } from '@/lib/id';
-import { colors, spacing, radius, typography } from '@/lib/theme';
+import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
 import type { Book } from '@/lib/types';
 
 const CATEGORIES: Book['category'][] = ['DSM', 'BDT', 'Psikodinami', 'Noropsikoloji', 'Diger'];
@@ -147,7 +147,7 @@ function BookCard({ book, onOpen, onDelete }: { book: Book; onOpen: () => void; 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: spacing.xl + spacing.md },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: safeTop + spacing.sm },
   title: { ...typography.h2 },
   uploadBtn: { backgroundColor: colors.accent, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2 },
   uploadBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
