@@ -434,7 +434,7 @@ export const DSM5_DATA: DSMChapter[] = [
 // Türkçe büyük İ/ı ve aksan farklarını arama dışı bırakmak için ASCII'ye indirger
 const TR_FOLD: Record<string, string> = { 'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u' };
 
-function foldTurkish(text: string): string {
+export function foldTurkish(text: string): string {
   return text
     .toLocaleLowerCase('tr')
     .normalize('NFD')

@@ -1,10 +1,16 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, Modal, ScrollView, Linking, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, Modal, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
+import { WebView } from 'react-native-webview';
+import * as Sharing from 'expo-sharing';
 import { useDatabase } from '@/contexts/database-context';
 import { colors, spacing, radius, typography, safeTop } from '@/lib/theme';
+import { Icon } from '@/components/ui/Icon';
 import type { Book, BookAnnotation } from '@/lib/types';
 
+// PDF okuyucu: iOS'ta PDF uygulama İÇİNDE gösterilir (WebView yerel PDF
+// render eder). Android WebView PDF desteklemediğinden paylaşım menüsüyle
+// harici görüntüleyiciye gönderilir.
 export default function BookReader() {
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
   const router = useRouter();
@@ -13,7 +19,7 @@ export default function BookReader() {
   const [annotations, setAnnotations] = useState<BookAnnotation[]>([]);
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [newAnnotation, setNewAnnotation] = useState('');
-  const [addingAnnotation, setAddingAnnotation] = useState(false);
+  const [pdfError, setPdfError] = useState(false);
 
   useEffect(() => {
     const b = books.find(b => b.id === bookId);
@@ -27,14 +33,13 @@ export default function BookReader() {
 
   useEffect(() => { loadAnnotations(); }, [loadAnnotations]);
 
-  const openPdf = async () => {
+  const openExternal = async () => {
     if (!book) return;
     try {
-      const supported = await Linking.canOpenURL(book.file_path);
-      if (supported) {
-        await Linking.openURL(book.file_path);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(book.file_path, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
       } else {
-        Alert.alert('Hata', 'Bu dosya açılamıyor. Destekli bir PDF görüntüleyici gerekli.');
+        Alert.alert('Hata', 'Bu cihazda paylaşım desteklenmiyor.');
       }
     } catch {
       Alert.alert('Hata', 'PDF açılırken bir sorun oluştu.');
@@ -45,7 +50,6 @@ export default function BookReader() {
     if (!newAnnotation.trim()) return;
     await addAnnotation({ book_id: bookId, page: 0, content: newAnnotation.trim() });
     setNewAnnotation('');
-    setAddingAnnotation(false);
     loadAnnotations();
   };
 
@@ -59,111 +63,97 @@ export default function BookReader() {
   if (!book) {
     return (
       <View style={styles.container}>
-        <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 60 }}>Kitap bulunamadı.</Text>
+        <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 60 }}>Dosya bulunamadı.</Text>
       </View>
     );
   }
 
-  const fileSizeMB = book.file_size ? (book.file_size / (1024 * 1024)).toFixed(1) : null;
+  const canInlineView = Platform.OS === 'ios' && !pdfError;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>← Geri</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
+          <Icon name="chevron-back" size={22} color={colors.accent} />
+          <Text style={styles.back}>Geri</Text>
         </TouchableOpacity>
         <Text style={styles.title} numberOfLines={1}>{book.title}</Text>
-        <TouchableOpacity onPress={() => setShowAnnotations(true)}>
-          <Text style={styles.actionBtn}>📑 {annotations.length}</Text>
+        <TouchableOpacity onPress={openExternal} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginRight: spacing.sm }}>
+          <Icon name="share-outline" size={20} color={colors.accent} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setShowAnnotations(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.noteBtn}>
+          <Icon name="bookmarks-outline" size={18} color={colors.accent} />
+          {annotations.length > 0 && <Text style={styles.noteCount}>{annotations.length}</Text>}
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.bookCard}>
-          <Text style={styles.bookEmoji}>📖</Text>
-          <Text style={styles.bookTitle}>{book.title}</Text>
-          {book.author ? <Text style={styles.bookAuthor}>{book.author}</Text> : null}
-          <View style={styles.metaRow}>
-            <View style={styles.catBadge}><Text style={styles.catText}>{book.category}</Text></View>
-            {fileSizeMB ? <Text style={styles.metaText}>{fileSizeMB} MB</Text> : null}
-          </View>
+      {canInlineView ? (
+        <WebView
+          style={{ flex: 1, backgroundColor: colors.background }}
+          source={{ uri: book.file_path }}
+          originWhitelist={['*']}
+          allowFileAccess
+          allowingReadAccessToURL={book.file_path}
+          onError={() => setPdfError(true)}
+        />
+      ) : (
+        <View style={styles.fallback}>
+          <Icon name="document-text-outline" size={44} color={colors.textMuted} />
+          <Text style={styles.fallbackTitle}>{book.title}</Text>
+          <Text style={styles.fallbackText}>
+            {pdfError
+              ? 'PDF uygulama içinde görüntülenemedi.'
+              : 'Bu cihazda PDF harici görüntüleyiciyle açılır.'}
+          </Text>
+          <TouchableOpacity style={styles.openBtn} onPress={openExternal}>
+            <Text style={styles.openBtnText}>PDF'i Aç / Paylaş</Text>
+          </TouchableOpacity>
         </View>
+      )}
 
-        <TouchableOpacity style={styles.openBtn} onPress={openPdf}>
-          <Text style={styles.openBtnText}>PDF'i Aç</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.addAnnotBtn} onPress={() => setAddingAnnotation(true)}>
-          <Text style={styles.addAnnotBtnText}>+ Not Ekle</Text>
-        </TouchableOpacity>
-
-        {annotations.length > 0 && (
-          <View style={styles.annotSection}>
-            <Text style={styles.annotSectionTitle}>Notlar ({annotations.length})</Text>
-            {annotations.map(ann => (
-              <View key={ann.id} style={styles.annotCard}>
-                <Text style={styles.annotContent}>{ann.content}</Text>
-                <TouchableOpacity onPress={() => confirmDeleteAnnotation(ann)}>
-                  <Text style={styles.deleteAnnot}>🗑</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-
-      <Modal visible={addingAnnotation} transparent animationType="slide" onRequestClose={() => setAddingAnnotation(false)}>
+      {/* Notlar: liste + ekleme tek modalda */}
+      <Modal visible={showAnnotations} transparent animationType="slide" onRequestClose={() => setShowAnnotations(false)}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Not Ekle</Text>
-            <TextInput
-              style={styles.annotInput}
-              value={newAnnotation}
-              onChangeText={setNewAnnotation}
-              placeholder="Bu kitaba not ekle..."
-              placeholderTextColor={colors.placeholder}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              autoFocus
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity onPress={() => { setAddingAnnotation(false); setNewAnnotation(''); }}>
-                <Text style={styles.cancelBtn}>İptal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.saveAnnotBtn} onPress={saveAnnotation}>
-                <Text style={styles.saveAnnotBtnText}>Kaydet</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal visible={showAnnotations} transparent animationType="slide" onRequestClose={() => setShowAnnotations(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { maxHeight: '70%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Notlar ({annotations.length})</Text>
-              <TouchableOpacity onPress={() => setShowAnnotations(false)}>
-                <Text style={styles.closeBtn}>✕</Text>
+              <TouchableOpacity onPress={() => setShowAnnotations(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Icon name="close" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
-            <ScrollView>
+            <ScrollView style={{ maxHeight: 320 }}>
               {annotations.length === 0 ? (
                 <Text style={styles.emptyAnnot}>Henüz not eklenmemiş.</Text>
               ) : (
                 annotations.map(ann => (
                   <View key={ann.id} style={styles.annotCard}>
                     <Text style={styles.annotContent}>{ann.content}</Text>
-                    <TouchableOpacity onPress={() => confirmDeleteAnnotation(ann)}>
-                      <Text style={styles.deleteAnnot}>🗑</Text>
+                    <TouchableOpacity onPress={() => confirmDeleteAnnotation(ann)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                      <Icon name="trash-outline" size={16} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
                 ))
               )}
             </ScrollView>
+            <View style={styles.addRow}>
+              <TextInput
+                style={styles.annotInput}
+                value={newAnnotation}
+                onChangeText={setNewAnnotation}
+                placeholder="Bu kaynağa not ekle..."
+                placeholderTextColor={colors.placeholder}
+                multiline
+              />
+              <TouchableOpacity
+                style={[styles.saveAnnotBtn, !newAnnotation.trim() && { opacity: 0.4 }]}
+                onPress={saveAnnotation}
+                disabled={!newAnnotation.trim()}
+              >
+                <Icon name="arrow-up" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -171,37 +161,25 @@ export default function BookReader() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, paddingTop: safeTop + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, paddingHorizontal: spacing.md, paddingTop: safeTop + spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.cardBorder, backgroundColor: colors.card },
+  backRow: { flexDirection: 'row', alignItems: 'center' },
   back: { color: colors.accent, fontSize: 15, fontWeight: '600' },
   title: { flex: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
-  actionBtn: { color: colors.accent, fontSize: 14, padding: spacing.xs },
-  content: { padding: spacing.md, gap: spacing.md, paddingBottom: 40 },
-  bookCard: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder },
-  bookEmoji: { fontSize: 48 },
-  bookTitle: { ...typography.h2, textAlign: 'center' },
-  bookAuthor: { color: colors.textSecondary, fontSize: 14, textAlign: 'center' },
-  metaRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
-  catBadge: { backgroundColor: colors.accentDim, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 3 },
-  catText: { color: colors.accentLight, fontSize: 12, fontWeight: '600' },
-  metaText: { color: colors.textMuted, fontSize: 12 },
-  openBtn: { backgroundColor: colors.accent, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
-  openBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  addAnnotBtn: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', borderWidth: 1, borderColor: colors.cardBorder },
-  addAnnotBtnText: { color: colors.accent, fontWeight: '600', fontSize: 14 },
-  annotSection: { gap: spacing.sm },
-  annotSectionTitle: { ...typography.label },
-  annotCard: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.cardBorder },
-  annotContent: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 20 },
-  deleteAnnot: { fontSize: 16 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  noteBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  noteCount: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  fallback: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
+  fallbackTitle: { ...typography.h3, textAlign: 'center' },
+  fallbackText: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: spacing.sm },
+  openBtn: { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 2 },
+  openBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalBox: { backgroundColor: colors.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   modalTitle: { ...typography.h3 },
-  closeBtn: { color: colors.textMuted, fontSize: 18 },
-  annotInput: { backgroundColor: colors.inputBg, color: colors.text, borderRadius: radius.md, padding: spacing.sm, fontSize: 14, minHeight: 100, borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.md },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.lg },
-  cancelBtn: { color: colors.textSecondary, fontSize: 14 },
-  saveAnnotBtn: { backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  saveAnnotBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  emptyAnnot: { color: colors.textMuted, textAlign: 'center', padding: spacing.lg },
+  annotCard: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, backgroundColor: colors.background, borderRadius: radius.md, padding: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.xs },
+  annotContent: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 19 },
+  emptyAnnot: { color: colors.textMuted, textAlign: 'center', padding: spacing.md },
+  addRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, marginTop: spacing.sm },
+  annotInput: { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderRadius: radius.md, padding: spacing.sm, fontSize: 14, maxHeight: 90, borderWidth: 1, borderColor: colors.cardBorder },
+  saveAnnotBtn: { backgroundColor: colors.accent, width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
 });
