@@ -239,8 +239,8 @@ export async function generateSessionSummary(
   notes: SessionNote[]
 ): Promise<string> {
   const noteText = notes.map(n => `[${n.category.toUpperCase()}] ${n.content}`).join('\n');
-  const system = `${BASE_SYSTEM}\n\nGörevin: Seans notlarından kısa, yapılandırılmış bir klinik özet çıkarmak. Format: (1) Ana Bulgular (2) Ruh Hali & Davranış (3) Müdahaleler (4) Sonraki Adımlar`;
-  const prompt = `Hasta: ${anonymizePatientName(patient.name)}, Yaklaşım: ${session.approach || 'belirtilmemiş'}, Süre: ${session.duration || '?'} dk\n\nSeans Notları:\n${noteText || 'Not girilmemiş.'}`;
+  const system = `${BASE_SYSTEM}\n\nGörevin: Seans notlarından SOAP formatında kısa, yapılandırılmış bir klinik özet çıkarmak. Format:\nS (Subjektif): danışanın kendi ifadeleri ve şikayetleri\nO (Objektif): terapistin gözlemleri, davranış ve duygulanım\nA (Değerlendirme): klinik yorum, ilerleme, risk\nP (Plan): müdahaleler, ödevler, sonraki adımlar\nNot etiketleri subjektif/objektif/degerlendirme/plan doğrudan ilgili bölüme aittir; eski etiketler şöyle eşlenir: genel, davranis → O; duygu, bilis → S; risk → A; mudahale, hedef → P.`;
+  const prompt = `Danışan: ${anonymizePatientName(patient.name)}, Yaklaşım: ${session.approach || 'belirtilmemiş'}, Süre: ${session.duration || '?'} dk\n\nSeans Notları:\n${noteText || 'Not girilmemiş.'}`;
 
   return callClaude(apiKey, system, prompt);
 }

@@ -4,8 +4,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { useDatabase } from '@/contexts/database-context';
 import { generateSessionSummary } from '@/lib/claude';
 import { colors, spacing, radius, typography } from '@/lib/theme';
-import type { Session, SessionNote } from '@/lib/types';
-import { NOTE_CATEGORIES } from '@/lib/types';
+import { Icon } from '@/components/ui/Icon';
+import type { Session, SessionNote, SoapSectionValue, LegacyNoteCategory } from '@/lib/types';
+import { SOAP_SECTIONS, LEGACY_CATEGORY_TO_SOAP, LEGACY_NOTE_LABELS } from '@/lib/types';
+
+// Bir notun ait olduğu SOAP bölümü: yeni notlar doğrudan SOAP değeri taşır,
+// eski kategorili notlar eşleme tablosuyla ilgili bölümde gösterilir.
+const soapOf = (n: SessionNote): SoapSectionValue =>
+  (LEGACY_CATEGORY_TO_SOAP as Record<string, SoapSectionValue>)[n.category] ?? (n.category as SoapSectionValue);
 
 export default function SessionDetail() {
   const { id, sessionId } = useLocalSearchParams<{ id: string; sessionId: string }>();
@@ -15,7 +21,7 @@ export default function SessionDetail() {
   const [session, setSession] = useState<Session | null>(null);
   const [notes, setNotes] = useState<SessionNote[]>([]);
   const [editingNote, setEditingNote] = useState<string | null>(null);
-  const [newNoteCategory, setNewNoteCategory] = useState<SessionNote['category']>('genel');
+  const [newNoteCategory, setNewNoteCategory] = useState<SoapSectionValue>('subjektif');
   const [newNoteContent, setNewNoteContent] = useState('');
   const [editContent, setEditContent] = useState('');
   const [summaryEdit, setSummaryEdit] = useState('');
@@ -103,9 +109,9 @@ export default function SessionDetail() {
     ]);
   };
 
-  const notesByCategory = NOTE_CATEGORIES.map(cat => ({
-    ...cat,
-    notes: notes.filter(n => n.category === cat.value),
+  const notesBySoap = SOAP_SECTIONS.map(sec => ({
+    ...sec,
+    notes: notes.filter(n => soapOf(n) === sec.value),
   }));
 
   if (!session) return <View style={styles.container}><Text style={styles.loading}>Yükleniyor...</Text></View>;
@@ -113,11 +119,12 @@ export default function SessionDetail() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>← Geri</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
+          <Icon name="chevron-back" size={22} color={colors.accent} />
+          <Text style={styles.back}>Geri</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={confirmDeleteSession}>
-          <Text style={styles.deleteBtn}>🗑</Text>
+        <TouchableOpacity onPress={confirmDeleteSession} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Icon name="trash-outline" size={20} color={colors.error} />
         </TouchableOpacity>
       </View>
 
@@ -173,67 +180,78 @@ export default function SessionDetail() {
           )}
         </View>
 
-        <Text style={styles.sectionTitle}>NOTLAR</Text>
+        <Text style={styles.sectionTitle}>SOAP NOTLARI</Text>
 
-        {notesByCategory.map(cat => (
-          <View key={cat.value}>
-            {cat.notes.length > 0 && (
-              <View style={styles.categorySection}>
-                <Text style={styles.categoryTitle}>{cat.label}</Text>
-                {cat.notes.map(note => (
-                  <View key={note.id} style={styles.noteCard}>
-                    {editingNote === note.id ? (
-                      <View>
-                        <TextInput
-                          style={styles.noteEditInput}
-                          value={editContent}
-                          onChangeText={setEditContent}
-                          multiline
-                          textAlignVertical="top"
-                          autoFocus
-                        />
-                        <View style={styles.noteActions}>
-                          <TouchableOpacity onPress={() => setEditingNote(null)}>
-                            <Text style={styles.cancelBtn}>İptal</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={() => saveEdit(note.id)}>
-                            <Text style={styles.saveNoteBtn}>Kaydet</Text>
-                          </TouchableOpacity>
-                        </View>
+        {notesBySoap.map(sec => (
+          <View key={sec.value} style={styles.categorySection}>
+            <View style={styles.soapHeader}>
+              <View style={styles.soapLetterBadge}>
+                <Text style={styles.soapLetter}>{sec.letter}</Text>
+              </View>
+              <Text style={styles.categoryTitle}>{sec.label}</Text>
+            </View>
+            {sec.notes.length === 0 ? (
+              <Text style={styles.soapEmptyHint}>{sec.hint}</Text>
+            ) : (
+              sec.notes.map(note => (
+                <View key={note.id} style={styles.noteCard}>
+                  {editingNote === note.id ? (
+                    <View>
+                      <TextInput
+                        style={styles.noteEditInput}
+                        value={editContent}
+                        onChangeText={setEditContent}
+                        multiline
+                        textAlignVertical="top"
+                        autoFocus
+                      />
+                      <View style={styles.noteActions}>
+                        <TouchableOpacity onPress={() => setEditingNote(null)}>
+                          <Text style={styles.cancelBtn}>İptal</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => saveEdit(note.id)}>
+                          <Text style={styles.saveNoteBtn}>Kaydet</Text>
+                        </TouchableOpacity>
                       </View>
-                    ) : (
+                    </View>
+                  ) : (
+                    <View>
                       <View style={styles.noteRow}>
                         <Text style={styles.noteContent}>{note.content}</Text>
                         <View style={styles.noteIconRow}>
-                          <TouchableOpacity onPress={() => startEdit(note)}>
-                            <Text style={styles.noteIcon}>✏️</Text>
+                          <TouchableOpacity onPress={() => startEdit(note)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                            <Icon name="pencil-outline" size={15} color={colors.textMuted} />
                           </TouchableOpacity>
-                          <TouchableOpacity onPress={() => deleteNoteHandler(note.id)}>
-                            <Text style={styles.noteIcon}>🗑</Text>
+                          <TouchableOpacity onPress={() => deleteNoteHandler(note.id)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                            <Icon name="trash-outline" size={15} color={colors.textMuted} />
                           </TouchableOpacity>
                         </View>
                       </View>
-                    )}
-                  </View>
-                ))}
-              </View>
+                      {note.category in LEGACY_NOTE_LABELS && (
+                        <Text style={styles.legacyTag}>Eski kategori: {LEGACY_NOTE_LABELS[note.category as LegacyNoteCategory]}</Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+              ))
             )}
           </View>
         ))}
 
         <View style={styles.addNoteBox}>
           <Text style={styles.addNoteTitle}>Not Ekle</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryChips}>
-            {NOTE_CATEGORIES.map(cat => (
+          <View style={styles.categoryChips}>
+            {SOAP_SECTIONS.map(sec => (
               <TouchableOpacity
-                key={cat.value}
-                style={[styles.catChip, newNoteCategory === cat.value && styles.catChipActive]}
-                onPress={() => setNewNoteCategory(cat.value)}
+                key={sec.value}
+                style={[styles.catChip, newNoteCategory === sec.value && styles.catChipActive]}
+                onPress={() => setNewNoteCategory(sec.value)}
               >
-                <Text style={[styles.catChipText, newNoteCategory === cat.value && styles.catChipTextActive]}>{cat.label}</Text>
+                <Text style={[styles.catChipText, newNoteCategory === sec.value && styles.catChipTextActive]}>{sec.letter} · {sec.label}</Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
+          <Text style={styles.chipHint}>{SOAP_SECTIONS.find(s => s.value === newNoteCategory)?.hint}</Text>
           <TextInput
             style={styles.noteInput}
             value={newNoteContent}
@@ -261,8 +279,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   loading: { color: colors.textSecondary, textAlign: 'center', marginTop: 60 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: spacing.xl + spacing.md },
+  backRow: { flexDirection: 'row', alignItems: 'center' },
   back: { color: colors.accent, fontSize: 15, fontWeight: '600' },
-  deleteBtn: { fontSize: 20 },
   content: { padding: spacing.md, paddingBottom: 40 },
   sessionInfo: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.cardBorder },
   sessionDate: { ...typography.h3, marginBottom: spacing.xs },
@@ -278,7 +296,13 @@ const styles = StyleSheet.create({
   summaryInput: { backgroundColor: colors.inputBg, color: colors.text, borderRadius: radius.sm, padding: spacing.sm, fontSize: 14, minHeight: 80, borderWidth: 1, borderColor: colors.cardBorder },
   sectionTitle: { ...typography.label, marginBottom: spacing.sm },
   categorySection: { marginBottom: spacing.md },
-  categoryTitle: { color: colors.accent, fontSize: 13, fontWeight: '700', marginBottom: spacing.xs },
+  soapHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
+  soapLetterBadge: { width: 22, height: 22, borderRadius: 6, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center' },
+  soapLetter: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  categoryTitle: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  soapEmptyHint: { color: colors.textMuted, fontSize: 12, fontStyle: 'italic', lineHeight: 17, marginLeft: 30 },
+  legacyTag: { color: colors.textMuted, fontSize: 10, marginTop: 4 },
+  chipHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginBottom: spacing.sm },
   noteCard: { backgroundColor: colors.card, borderRadius: radius.sm, padding: spacing.sm, marginBottom: spacing.xs, borderLeftWidth: 3, borderLeftColor: colors.accent, borderWidth: 1, borderColor: colors.cardBorder },
   noteRow: { flexDirection: 'row', gap: spacing.xs },
   noteContent: { flex: 1, color: colors.text, fontSize: 14, lineHeight: 21 },
@@ -290,7 +314,7 @@ const styles = StyleSheet.create({
   saveNoteBtn: { color: colors.accent, fontSize: 13, fontWeight: '700' },
   addNoteBox: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md, borderWidth: 1, borderColor: colors.cardBorder },
   addNoteTitle: { ...typography.label, marginBottom: spacing.sm },
-  categoryChips: { gap: spacing.xs, paddingBottom: spacing.sm },
+  categoryChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, paddingBottom: spacing.sm },
   catChip: { borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 4, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.cardBorder },
   catChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   catChipText: { color: colors.textSecondary, fontSize: 12, fontWeight: '500' },

@@ -38,10 +38,16 @@ export interface Session {
   updated_at: string;
 }
 
+// SOAP: klinik not standardı — Subjektif / Objektif / Assessment (Değerlendirme) / Plan
+export type SoapSectionValue = 'subjektif' | 'objektif' | 'degerlendirme' | 'plan';
+
+// Eski serbest kategoriler (SOAP öncesi kayıtlarda hâlâ mevcut; silinmez, SOAP'a eşlenir)
+export type LegacyNoteCategory = 'genel' | 'davranis' | 'duygu' | 'bilis' | 'hedef' | 'mudahale' | 'risk';
+
 export interface SessionNote {
   id: string;
   session_id: string;
-  category: 'genel' | 'davranis' | 'duygu' | 'bilis' | 'hedef' | 'mudahale' | 'risk';
+  category: SoapSectionValue | LegacyNoteCategory;
   content: string;
   created_at: string;
 }
@@ -170,15 +176,34 @@ export interface AppSettings {
   auto_lock_minutes?: string;
 }
 
-export const NOTE_CATEGORIES: { value: SessionNote['category']; label: string }[] = [
-  { value: 'genel', label: 'Genel Gözlem' },
-  { value: 'davranis', label: 'Davranış' },
-  { value: 'duygu', label: 'Duygu Durum' },
-  { value: 'bilis', label: 'Bilişsel İçerik' },
-  { value: 'mudahale', label: 'Müdahale' },
-  { value: 'hedef', label: 'Hedefler / Ödevler' },
-  { value: 'risk', label: 'Risk Değerlendirmesi' },
+export const SOAP_SECTIONS: { value: SoapSectionValue; letter: string; label: string; hint: string }[] = [
+  { value: 'subjektif', letter: 'S', label: 'Subjektif', hint: 'Danışanın kendi ifadeleri: şikayetler, duygular, aktardığı yaşantılar' },
+  { value: 'objektif', letter: 'O', label: 'Objektif', hint: 'Sizin gözlemleriniz: görünüm, duygulanım, davranış, test sonuçları' },
+  { value: 'degerlendirme', letter: 'A', label: 'Değerlendirme', hint: 'Klinik yorumunuz: ilerleme, formülasyon, risk değerlendirmesi' },
+  { value: 'plan', letter: 'P', label: 'Plan', hint: 'Sonraki adımlar: müdahaleler, ödevler, bir sonraki seansın hedefi' },
 ];
+
+// Eski kategorilerle kaydedilmiş notların SOAP bölümlerine eşlenmesi
+export const LEGACY_CATEGORY_TO_SOAP: Record<LegacyNoteCategory, SoapSectionValue> = {
+  genel: 'objektif',
+  davranis: 'objektif',
+  duygu: 'subjektif',
+  bilis: 'subjektif',
+  mudahale: 'plan',
+  hedef: 'plan',
+  risk: 'degerlendirme',
+};
+
+// Eski kategorilerin etiketleri (SOAP öncesi notların üzerinde rozet olarak gösterilir)
+export const LEGACY_NOTE_LABELS: Record<LegacyNoteCategory, string> = {
+  genel: 'Genel Gözlem',
+  davranis: 'Davranış',
+  duygu: 'Duygu Durum',
+  bilis: 'Bilişsel İçerik',
+  mudahale: 'Müdahale',
+  hedef: 'Hedefler / Ödevler',
+  risk: 'Risk Değerlendirmesi',
+};
 
 export const SESSION_APPROACHES = [
   'BDT', 'DBT', 'ACT', 'Psikodinamik', 'EMDR', 'Diger',
